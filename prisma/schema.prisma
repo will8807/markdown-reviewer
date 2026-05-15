@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  comments  Comment[]
+  sessions  ReviewSession[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sources Source[]
+}
+
+enum SourceType {
+  LOCAL
+  GIT
+}
+
+model Source {
+  id        String     @id @default(cuid())
+  projectId String
+  type      SourceType
+  name      String
+  localPath String?
+  gitUrl    String?
+  createdAt DateTime   @default(now())
+
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revisions SourceRevision[]
+  files     FileEntry[]
+  threads   CommentThread[]
+}
+
+model SourceRevision {
+  id        String   @id @default(cuid())
+  sourceId  String
+  sha       String?
+  createdAt DateTime @default(now())
+
+  source  Source          @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  anchors CommentAnchor[]
+}
+
+model FileEntry {
+  id        String   @id @default(cuid())
+  sourceId  String
+  path      String
+  createdAt DateTime @default(now())
+
+  source  Source          @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  threads CommentThread[]
+
+  @@unique([sourceId, path])
+}
+
+model ReviewSession {
+  id        String   @id @default(cuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  user    User            @relation(fields: [userId], references: [id])
+  threads CommentThread[]
+}
+
+model CommentThread {
+  id         String    @id @default(cuid())
+  sourceId   String
+  fileId     String?
+  sessionId  String?
+  resolved   Boolean   @default(false)
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  source   Source         @relation(fields: [sourceId], references: [id])
+  file     FileEntry?     @relation(fields: [fileId], references: [id])
+  session  ReviewSession? @relation(fields: [sessionId], references: [id])
+  comments Comment[]
+  anchor   CommentAnchor?
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  threadId  String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  thread CommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id])
+}
+
+enum AnchorType {
+  TEXT_SELECTION
+  HEADING
+  BLOCK
+  IMAGE_REGION
+  DIFF_HUNK
+}
+
+model CommentAnchor {
+  id           String     @id @default(cuid())
+  threadId     String     @unique
+  revisionId   String?
+  type         AnchorType
+  filePath     String
+  selectedText String?
+  prefix       String?
+  suffix       String?
+  headingPath  String?
+  charStart    Int?
+  charEnd      Int?
+  imgX         Float?
+  imgY         Float?
+  imgW         Float?
+  imgH         Float?
+  diffSide     String?
+  hunkId       String?
+  lineStart    Int?
+  lineEnd      Int?
+
+  thread   CommentThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  revision SourceRevision? @relation(fields: [revisionId], references: [id])
+}

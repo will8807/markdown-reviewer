@@ -9,7 +9,7 @@ export async function findFileByPath(sourceId: string, filePath: string) {
 
 export async function createCommentThread(
   sourceId: string,
-  fileId: string,
+  fileId: string | null,
   anchor: Prisma.CommentAnchorCreateWithoutThreadInput,
 ) {
   return prisma.commentThread.create({

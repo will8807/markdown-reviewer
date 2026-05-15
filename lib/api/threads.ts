@@ -52,3 +52,29 @@ export async function setThreadResolved(threadId: string, resolved: boolean) {
     },
   })
 }
+
+export async function listThreadsForDiff(
+  sourceId: string,
+  filePath: string,
+  baseSha: string,
+  headSha: string,
+) {
+  return prisma.commentThread.findMany({
+    where: {
+      sourceId,
+      anchor: {
+        type: 'DIFF_HUNK',
+        filePath,
+        hunkId: `${baseSha}:${headSha}`,
+      },
+    },
+    include: {
+      anchor: true,
+      comments: {
+        include: { author: true },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+}

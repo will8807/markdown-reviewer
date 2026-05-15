@@ -1,9 +1,19 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { getRepoDir } from '@/lib/sources/gitRevisions'
-import { resolveRef } from '@/lib/sources/gitSource'
-import { listChangedFiles } from '@/lib/diff/computeDiff'
+import { resolveRef, readFile } from '@/lib/sources/gitSource'
+import { listChangedFiles, computeFileDiff } from '@/lib/diff/computeDiff'
+import { renderMarkdown } from '@/lib/markdown/render'
 import CompareClient from '@/components/CompareClient'
+import type { DiffHunk } from '@/lib/diff/computeDiff'
+
+interface ActiveFileDiff {
+  baseHtml: string | null
+  headHtml: string | null
+  hunks: DiffHunk[]
+  isBinary: boolean
+  status: 'added' | 'removed' | 'modified' | 'renamed'
+}
 
 export default async function ComparePage({
   params,
@@ -31,30 +41,74 @@ export default async function ComparePage({
         base={null}
         head={null}
         activePath={null}
+        activeFileDiff={null}
       />
     )
   }
 
   const repoDir = getRepoDir(source.id)
+
+  let baseSha: string
+  let headSha: string
   try {
-    const [baseSha, headSha] = await Promise.all([
+    ;[baseSha, headSha] = await Promise.all([
       resolveRef(repoDir, base),
       resolveRef(repoDir, head),
     ])
-    const files = await listChangedFiles(repoDir, baseSha, headSha)
-    return (
-      <CompareClient
-        projectId={projectId}
-        sourceId={sourceId}
-        files={files}
-        baseSha={baseSha}
-        headSha={headSha}
-        base={base}
-        head={head}
-        activePath={activePath ?? null}
-      />
-    )
   } catch {
-    return <div className="p-8 text-red-500">Failed to compute diff. Check that both refs exist.</div>
+    return <div className="p-8 text-red-500">Failed to resolve refs. Check that both exist.</div>
   }
+
+  const files = await listChangedFiles(repoDir, baseSha, headSha).catch(() => [])
+
+  let activeFileDiff: ActiveFileDiff | null = null
+
+  if (activePath) {
+    try {
+      const diff = await computeFileDiff(repoDir, baseSha, headSha, activePath)
+
+      let baseHtml: string | null = null
+      let headHtml: string | null = null
+
+      if (!diff.isBinary) {
+        const renderOpts = { projectId, sourceId, filePath: activePath, includeSourceLines: true }
+
+        if (diff.status !== 'added') {
+          try {
+            const buf = await readFile(repoDir, baseSha, activePath)
+            baseHtml = await renderMarkdown(buf.toString('utf8'), renderOpts)
+          } catch { /* file may not exist on base */ }
+        }
+
+        if (diff.status !== 'removed') {
+          try {
+            const buf = await readFile(repoDir, headSha, activePath)
+            headHtml = await renderMarkdown(buf.toString('utf8'), renderOpts)
+          } catch { /* file may not exist on head */ }
+        }
+      }
+
+      activeFileDiff = {
+        baseHtml,
+        headHtml,
+        hunks: diff.hunks,
+        isBinary: diff.isBinary,
+        status: diff.status,
+      }
+    } catch { /* diff failed — show nothing */ }
+  }
+
+  return (
+    <CompareClient
+      projectId={projectId}
+      sourceId={sourceId}
+      files={files}
+      baseSha={baseSha}
+      headSha={headSha}
+      base={base}
+      head={head}
+      activePath={activePath ?? null}
+      activeFileDiff={activeFileDiff}
+    />
+  )
 }

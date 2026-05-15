@@ -3,13 +3,21 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DiffFileList from './DiffFileList'
-import UnifiedDiff from './UnifiedDiff'
-import type { ChangedFile } from '@/lib/diff/computeDiff'
+import RenderedDiff from './RenderedDiff'
+import type { ChangedFile, DiffHunk } from '@/lib/diff/computeDiff'
 
 interface RefInfo {
   name: string
   sha: string
   type: 'branch' | 'tag'
+}
+
+interface ActiveFileDiff {
+  baseHtml: string | null
+  headHtml: string | null
+  hunks: DiffHunk[]
+  isBinary: boolean
+  status: 'added' | 'removed' | 'modified' | 'renamed'
 }
 
 interface Props {
@@ -21,17 +29,19 @@ interface Props {
   base: string | null
   head: string | null
   activePath: string | null
+  activeFileDiff: ActiveFileDiff | null
 }
 
 export default function CompareClient({
   projectId,
   sourceId,
   files,
+  baseSha,
+  headSha,
   base,
   head,
   activePath,
-  baseSha,
-  headSha,
+  activeFileDiff,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -56,10 +66,7 @@ export default function CompareClient({
     [router, searchParams, projectId, sourceId],
   )
 
-  const handleFileSelect = useCallback(
-    (path: string) => navigate({ path }),
-    [navigate],
-  )
+  const handleFileSelect = useCallback((path: string) => navigate({ path }), [navigate])
 
   const refOptions = refs.map((r) => (
     <option key={r.name} value={r.name}>
@@ -99,27 +106,36 @@ export default function CompareClient({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <DiffFileList
-            files={files}
-            activePath={activePath}
-            onSelect={handleFileSelect}
-          />
+          <DiffFileList files={files} activePath={activePath} onSelect={handleFileSelect} />
         </div>
       </div>
 
-      {/* Right: unified diff */}
-      <div className="flex-1 overflow-y-auto" data-testid="diff-view">
-        {activePath && baseSha && headSha ? (
-          <UnifiedDiff
-            projectId={projectId}
-            sourceId={sourceId}
-            baseSha={baseSha}
-            headSha={headSha}
-            filePath={activePath}
-          />
+      {/* Right: rendered diff or empty state */}
+      <div className="flex-1 overflow-hidden" data-testid="diff-view">
+        {activePath && activeFileDiff && baseSha && headSha ? (
+          activeFileDiff.isBinary ? (
+            <div className="p-8 text-sm text-zinc-500">
+              <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-1">Binary file</p>
+              <p className="font-mono text-xs">{activePath}</p>
+              <p className="mt-2 text-xs">Binary files cannot be shown as a rendered diff.</p>
+            </div>
+          ) : (
+            <RenderedDiff
+              sourceId={sourceId}
+              filePath={activePath}
+              baseSha={baseSha}
+              headSha={headSha}
+              baseHtml={activeFileDiff.baseHtml}
+              headHtml={activeFileDiff.headHtml}
+              hunks={activeFileDiff.hunks}
+              status={activeFileDiff.status}
+            />
+          )
         ) : (
           <div className="p-8 text-zinc-400 text-sm">
-            {base && head ? 'Select a file from the list to view its diff.' : 'Choose a base and head ref to compare.'}
+            {base && head
+              ? 'Select a file from the list to view its diff.'
+              : 'Choose a base and head ref to compare.'}
           </div>
         )}
       </div>

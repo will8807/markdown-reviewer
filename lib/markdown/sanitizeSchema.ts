@@ -24,5 +24,7 @@ export const sanitizeSchema: Schema = {
     h5: attrs('h5', ['id']),
     h6: attrs('h6', ['id']),
     a: attrs('a', ['ariaHidden']),
+    // Allow source-line data attributes on all elements (used by the diff viewer)
+    '*': attrs('*', ['dataSourceStart', 'dataSourceEnd']),
   },
 }

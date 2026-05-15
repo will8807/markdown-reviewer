@@ -23,7 +23,6 @@ interface PendingComposer {
   anchor: ReturnType<typeof serializeSelection>
   sourceId: string
   fileId: string | null
-  devUserId: string | null
 }
 
 export default function CommentPanel() {
@@ -34,7 +33,15 @@ export default function CommentPanel() {
   const [pending, setPending] = useState<PendingComposer | null>(null)
   const [body, setBody] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [devUserId, setDevUserId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then((r) => r.json())
+      .then((data: { userId: string | null }) => setDevUserId(data.userId))
+      .catch(() => null)
+  }, [])
 
   const filePath = searchParams?.get('path')
 
@@ -103,13 +110,13 @@ export default function CommentPanel() {
       const thread = (await threadRes.json()) as { id: string; fileId: string | null }
 
       // Add the comment
-      if (pending.devUserId) {
+      if (devUserId) {
         await fetch('/api/comments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             threadId: thread.id,
-            authorId: pending.devUserId,
+            authorId: devUserId,
             body: body.trim(),
           }),
         })

@@ -11,23 +11,21 @@ interface Props {
   sourceContent: string
   filePath: string
   fileId: string | null
-  devUserId: string | null
 }
 
-export default function ViewerClient({ html, sourceContent, filePath, fileId, devUserId }: Props) {
+export default function ViewerClient({ html, sourceContent, filePath, fileId }: Props) {
   const params = useParams<{ projectId: string; sourceId: string }>()
 
   const handleCreateThread = useCallback(
     (anchor: ReturnType<typeof serializeSelection>) => {
       if (!params?.sourceId) return
-      // Hand off to CommentPanel via a custom event — it owns the composer UI
       window.dispatchEvent(
         new CustomEvent('comment-requested', {
-          detail: { anchor, sourceId: params.sourceId, fileId, devUserId },
+          detail: { anchor, sourceId: params.sourceId, fileId },
         })
       )
     },
-    [params, fileId, devUserId]
+    [params, fileId]
   )
 
   return (

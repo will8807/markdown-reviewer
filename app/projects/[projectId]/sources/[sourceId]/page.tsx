@@ -60,15 +60,12 @@ export default async function ViewerPage({
     // DB not available — comments disabled
   }
 
-  const devUserId = process.env.DEV_USER_ID ?? null
-
   return (
     <ViewerClient
       html={html}
       sourceContent={content}
       filePath={filePath}
       fileId={fileId}
-      devUserId={devUserId}
     />
   )
 }

@@ -1,22 +1,20 @@
 import { PrismaClient } from '@prisma/client'
+import { PrismaLibSql } from '@prisma/adapter-libsql'
 
-const prisma = new PrismaClient()
+const adapter = new PrismaLibSql({ url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db' })
+const prisma = new PrismaClient({ adapter })
 
 async function main() {
-  const tables = [
-    '"Comment"',
-    '"CommentAnchor"',
-    '"CommentThread"',
-    '"FileEntry"',
-    '"ReviewSession"',
-    '"SourceRevision"',
-    '"Source"',
-    '"Project"',
-    '"User"',
-  ]
-  for (const table of tables) {
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${table} CASCADE`)
-  }
+  // SQLite doesn't support TRUNCATE or CASCADE — delete in FK order instead
+  await prisma.comment.deleteMany()
+  await prisma.commentAnchor.deleteMany()
+  await prisma.commentThread.deleteMany()
+  await prisma.fileEntry.deleteMany()
+  await prisma.reviewSession.deleteMany()
+  await prisma.sourceRevision.deleteMany()
+  await prisma.source.deleteMany()
+  await prisma.project.deleteMany()
+  await prisma.user.deleteMany()
   console.log('Database reset complete.')
 }
 

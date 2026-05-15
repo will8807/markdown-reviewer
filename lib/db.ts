@@ -1,10 +1,9 @@
 import { PrismaClient } from '@prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaLibSql } from '@prisma/adapter-libsql'
 
 function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL
-  if (!connectionString) throw new Error('DATABASE_URL is not set')
-  const adapter = new PrismaPg({ connectionString })
+  const url = process.env.DATABASE_URL ?? 'file:./prisma/dev.db'
+  const adapter = new PrismaLibSql({ url })
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],

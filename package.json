@@ -25,11 +25,11 @@
     "transpileOnly": true
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.8.0",
+    "@libsql/client": "^0.17.3",
+    "@prisma/adapter-libsql": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@shikijs/rehype": "^4.0.2",
     "next": "16.2.6",
-    "pg": "^8.20.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "rehype-autolink-headings": "^7.1.0",
@@ -52,7 +52,6 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/hast": "^3.0.4",
     "@types/node": "^20",
-    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.6",

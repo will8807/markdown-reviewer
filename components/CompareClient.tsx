@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DiffFileList from './DiffFileList'
+import UnifiedDiff from './UnifiedDiff'
 import type { ChangedFile } from '@/lib/diff/computeDiff'
 
 interface RefInfo {
@@ -29,6 +30,8 @@ export default function CompareClient({
   base,
   head,
   activePath,
+  baseSha,
+  headSha,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -104,18 +107,16 @@ export default function CompareClient({
         </div>
       </div>
 
-      {/* Right: diff view (step 23 will fill this in) */}
-      <div className="flex-1 overflow-y-auto">
-        {activePath ? (
-          <div
-            data-testid="diff-view"
-            className="p-4 text-sm text-zinc-400 font-mono"
-          >
-            {/* UnifiedDiff renders here in step 23 */}
-            <p className="text-zinc-500">
-              Diff for <span className="font-semibold text-zinc-700 dark:text-zinc-300">{activePath}</span> — renderer coming in next step.
-            </p>
-          </div>
+      {/* Right: unified diff */}
+      <div className="flex-1 overflow-y-auto" data-testid="diff-view">
+        {activePath && baseSha && headSha ? (
+          <UnifiedDiff
+            projectId={projectId}
+            sourceId={sourceId}
+            baseSha={baseSha}
+            headSha={headSha}
+            filePath={activePath}
+          />
         ) : (
           <div className="p-8 text-zinc-400 text-sm">
             {base && head ? 'Select a file from the list to view its diff.' : 'Choose a base and head ref to compare.'}

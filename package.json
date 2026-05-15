@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "bdd": "cucumber-js",
     "db:seed": "prisma db seed",
-    "db:reset": "node --experimental-strip-types scripts/reset-db.ts"
+    "db:reset": "node --experimental-strip-types scripts/reset-db.ts",
+    "db:clear-comments": "node --experimental-strip-types scripts/clear-comments.ts"
   },
   "prisma": {
     "seed": "node --experimental-strip-types prisma/seed.ts"

@@ -5,6 +5,8 @@ export interface TextAnchorData {
   suffix: string
   charStart: number
   charEnd: number
+  renderedStart?: number
+  renderedEnd?: number
 }
 
 const CONTEXT_LENGTH = 64
@@ -25,6 +27,17 @@ export function serializeSelection(
     charStart: selectionStart,
     charEnd: selectionEnd,
   }
+}
+
+export function renderedOffsetOf(root: HTMLElement, targetNode: Node, targetOffset: number): number {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let pos = 0
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    if (node === targetNode) return pos + targetOffset
+    pos += node.textContent?.length ?? 0
+  }
+  return pos
 }
 
 export interface AnchorLocation {

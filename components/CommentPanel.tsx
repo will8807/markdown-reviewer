@@ -15,7 +15,7 @@ interface Thread {
   id: string
   resolved: boolean
   resolvedAt: string | null
-  anchor: { selectedText: string | null; filePath: string } | null
+  anchor: { selectedText: string | null; prefix: string | null; renderedStart: number | null; renderedEnd: number | null; filePath: string } | null
   comments: Comment[]
 }
 
@@ -29,6 +29,7 @@ export default function CommentPanel() {
   const params = useParams<{ projectId: string; sourceId: string }>()
   const searchParams = useSearchParams()
   const [threads, setThreads] = useState<Thread[]>([])
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [fileId, setFileId] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingComposer | null>(null)
   const [body, setBody] = useState('')
@@ -44,6 +45,11 @@ export default function CommentPanel() {
   }, [])
 
   const filePath = searchParams?.get('path')
+
+  // Broadcast thread list (and active selection) so MarkdownViewer can apply highlights
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('threads-updated', { detail: { threads, activeId: activeThreadId } }))
+  }, [threads, activeThreadId])
 
   const refresh = useCallback((fid: string) => {
     setFileId(fid)
@@ -64,6 +70,16 @@ export default function CommentPanel() {
     window.addEventListener('comment-requested', handler)
     return () => window.removeEventListener('comment-requested', handler)
   }, [])
+
+  // Load threads when a file is first opened
+  useEffect(() => {
+    function handler(e: Event) {
+      const detail = (e as CustomEvent<{ fileId: string }>).detail
+      if (detail?.fileId) refresh(detail.fileId)
+    }
+    window.addEventListener('file-opened', handler)
+    return () => window.removeEventListener('file-opened', handler)
+  }, [refresh])
 
   // Listen for thread-created refresh signals
   useEffect(() => {
@@ -102,6 +118,8 @@ export default function CommentPanel() {
             suffix: pending.anchor.suffix,
             charStart: pending.anchor.charStart,
             charEnd: pending.anchor.charEnd,
+            renderedStart: pending.anchor.renderedStart,
+            renderedEnd: pending.anchor.renderedEnd,
           },
         }),
       })
@@ -199,10 +217,13 @@ export default function CommentPanel() {
           {threads.map((thread) => (
             <li
               key={thread.id}
-              className={`rounded-lg border p-3 text-sm ${
+              onClick={() => setActiveThreadId(id => id === thread.id ? null : thread.id)}
+              className={`rounded-lg border p-3 text-sm cursor-pointer ${
                 thread.resolved
                   ? 'border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 opacity-60'
-                  : 'border-zinc-200 dark:border-zinc-700'
+                  : activeThreadId === thread.id
+                  ? 'border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/30'
+                  : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
               }`}
             >
               {thread.anchor?.selectedText && (

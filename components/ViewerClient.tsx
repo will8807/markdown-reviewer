@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import MarkdownViewer from './MarkdownViewer'
 import SelectionPopover from './SelectionPopover'
@@ -15,6 +15,11 @@ interface Props {
 
 export default function ViewerClient({ html, sourceContent, filePath, fileId }: Props) {
   const params = useParams<{ projectId: string; sourceId: string }>()
+
+  useEffect(() => {
+    if (!fileId) return
+    window.dispatchEvent(new CustomEvent('file-opened', { detail: { fileId } }))
+  }, [fileId])
 
   const handleCreateThread = useCallback(
     (anchor: ReturnType<typeof serializeSelection>) => {

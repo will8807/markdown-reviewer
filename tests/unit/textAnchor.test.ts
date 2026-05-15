@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { serializeSelection, findAnchor } from '@/lib/anchors/textAnchor'
+import { serializeSelection, findAnchor, renderedOffsetOf } from '@/lib/anchors/textAnchor'
 
 const TEXT = 'The quick brown fox jumps over the lazy dog'
 
@@ -64,5 +64,37 @@ describe('findAnchor', () => {
       selectedText: 'quick',
     })
     expect(result).toBeNull()
+  })
+})
+
+describe('renderedOffsetOf', () => {
+  function makeArticle(html: string): HTMLElement {
+    const el = document.createElement('article')
+    el.innerHTML = html
+    document.body.appendChild(el)
+    return el
+  }
+
+  afterEach(() => { document.body.innerHTML = '' })
+
+  it('returns the offset within a single text node', () => {
+    const article = makeArticle('<p>hello world</p>')
+    const textNode = article.querySelector('p')!.firstChild as Text
+    expect(renderedOffsetOf(article, textNode, 0)).toBe(0)
+    expect(renderedOffsetOf(article, textNode, 5)).toBe(5)
+  })
+
+  it('counts characters from preceding text nodes', () => {
+    const article = makeArticle('<p>foo</p><p>bar</p>')
+    const secondText = article.querySelectorAll('p')[1].firstChild as Text
+    expect(renderedOffsetOf(article, secondText, 0)).toBe(3)
+    expect(renderedOffsetOf(article, secondText, 3)).toBe(6)
+  })
+
+  it('handles nested elements spanning multiple text nodes', () => {
+    const article = makeArticle('<p><strong>bold</strong> rest</p>')
+    const restNode = article.querySelector('p')!.lastChild as Text
+    expect(renderedOffsetOf(article, restNode, 0)).toBe(4)
+    expect(renderedOffsetOf(article, restNode, 5)).toBe(9)
   })
 })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { serializeSelection } from '@/lib/anchors/textAnchor'
+import { serializeSelection, renderedOffsetOf } from '@/lib/anchors/textAnchor'
 
 interface Props {
   sourceContent: string
@@ -14,6 +14,7 @@ interface PopoverState {
   y: number
   anchor: ReturnType<typeof serializeSelection>
 }
+
 
 export default function SelectionPopover({ sourceContent, filePath, onCreateThread }: Props) {
   const [popover, setPopover] = useState<PopoverState | null>(null)
@@ -36,8 +37,6 @@ export default function SelectionPopover({ sourceContent, filePath, onCreateThre
       const range = selection.getRangeAt(0)
       const rect = range.getBoundingClientRect()
 
-      // Find char offsets within sourceContent by searching for the selected text
-      // with context from the DOM range's surrounding text nodes
       const idx = sourceContent.indexOf(text)
       if (idx === -1) {
         setPopover(null)
@@ -46,9 +45,16 @@ export default function SelectionPopover({ sourceContent, filePath, onCreateThre
 
       const anchor = serializeSelection(sourceContent, idx, idx + text.length, filePath)
 
+      // Capture exact rendered offsets from the live DOM selection
+      const article = document.querySelector('article')
+      if (article) {
+        anchor.renderedStart = renderedOffsetOf(article, range.startContainer, range.startOffset)
+        anchor.renderedEnd = renderedOffsetOf(article, range.endContainer, range.endOffset)
+      }
+
       setPopover({
-        x: rect.left + rect.width / 2 + window.scrollX,
-        y: rect.top + window.scrollY - 8,
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
         anchor,
       })
     }
@@ -63,7 +69,7 @@ export default function SelectionPopover({ sourceContent, filePath, onCreateThre
     <div
       role="tooltip"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         left: popover.x,
         top: popover.y,
         transform: 'translate(-50%, -100%)',

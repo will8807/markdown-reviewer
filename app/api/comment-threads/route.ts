@@ -14,6 +14,8 @@ const bodySchema = z.object({
     headingPath: z.string().optional(),
     charStart: z.number().int().optional(),
     charEnd: z.number().int().optional(),
+    renderedStart: z.number().int().optional(),
+    renderedEnd: z.number().int().optional(),
   }),
 })
 

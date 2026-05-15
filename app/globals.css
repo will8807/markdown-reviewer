@@ -25,3 +25,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+::highlight(comment-thread) {
+  background-color: rgb(250 204 21 / 0.4);
+  color: inherit;
+}
+
+::highlight(comment-thread-active) {
+  background-color: rgb(251 146 60 / 0.6);
+  color: inherit;
+}

@@ -12,8 +12,8 @@ model User {
   name      String
   createdAt DateTime @default(now())
 
-  comments  Comment[]
-  sessions  ReviewSession[]
+  comments Comment[]
+  sessions ReviewSession[]
 }
 
 model Project {
@@ -124,8 +124,10 @@ model CommentAnchor {
   prefix       String?
   suffix       String?
   headingPath  String?
-  charStart    Int?
-  charEnd      Int?
+  charStart     Int?
+  charEnd       Int?
+  renderedStart Int?
+  renderedEnd   Int?
   imgX         Float?
   imgY         Float?
   imgW         Float?

@@ -2,7 +2,16 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { read } from '@/lib/sources/localSource'
 import { renderMarkdown } from '@/lib/markdown/render'
-import MarkdownViewer from '@/components/MarkdownViewer'
+import ViewerClient from '@/components/ViewerClient'
+
+async function ensureFileEntry(sourceId: string, filePath: string): Promise<string> {
+  const existing = await prisma.fileEntry.findUnique({
+    where: { sourceId_path: { sourceId, path: filePath } },
+  })
+  if (existing) return existing.id
+  const created = await prisma.fileEntry.create({ data: { sourceId, path: filePath } })
+  return created.id
+}
 
 export default async function ViewerPage({
   params,
@@ -44,5 +53,22 @@ export default async function ViewerPage({
 
   const html = await renderMarkdown(content, { projectId, sourceId, filePath })
 
-  return <MarkdownViewer html={html} />
+  let fileId: string | null = null
+  try {
+    fileId = await ensureFileEntry(sourceId, filePath)
+  } catch {
+    // DB not available — comments disabled
+  }
+
+  const devUserId = process.env.DEV_USER_ID ?? null
+
+  return (
+    <ViewerClient
+      html={html}
+      sourceContent={content}
+      filePath={filePath}
+      fileId={fileId}
+      devUserId={devUserId}
+    />
+  )
 }

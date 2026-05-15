@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
+import AddGitSourceForm from '@/components/AddGitSourceForm'
 
 export default async function ProjectPage({
   params,
@@ -27,10 +28,11 @@ export default async function ProjectPage({
       {project.sources.length === 0 ? (
         <p className="text-zinc-500 text-sm">No sources configured.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul data-testid="source-list" className="space-y-2">
           {project.sources.map((source) => (
             <li key={source.id}>
               <Link
+                data-testid="source-card"
                 href={`/projects/${projectId}/sources/${source.id}`}
                 className="block rounded-lg border border-zinc-200 dark:border-zinc-700 p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
               >
@@ -43,6 +45,8 @@ export default async function ProjectPage({
           ))}
         </ul>
       )}
+
+      <AddGitSourceForm projectId={projectId} />
     </div>
   )
 }

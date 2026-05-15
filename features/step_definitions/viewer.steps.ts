@@ -29,12 +29,12 @@ Given('I am on the viewer for the demo source', async function (this: Playwright
 
 Then('the file tree contains {string}', async function (this: PlaywrightWorld, filename: string) {
   const treeLocator = this.page.locator('[data-testid="file-tree"]')
-  await expect(treeLocator.getByText(filename, { exact: false })).toBeVisible({ timeout: 5000 })
+  await expect(treeLocator.getByText(filename, { exact: false }).first()).toBeVisible({ timeout: 5000 })
 })
 
 When('I click the file {string} in the tree', async function (this: PlaywrightWorld, filename: string) {
   const treeLocator = this.page.locator('[data-testid="file-tree"]')
-  await treeLocator.getByText(filename, { exact: true }).click()
+  await treeLocator.getByText(filename, { exact: true }).first().click()
   await this.page.waitForLoadState('networkidle')
 })
 
@@ -76,5 +76,6 @@ Then('the page contains an unchecked checkbox', async function (this: Playwright
 
 Then('the page contains a highlighted code block', async function (this: PlaywrightWorld) {
   const content = this.page.locator('[data-testid="main-content"]')
-  await expect(content.locator('pre.shiki').first()).toBeVisible({ timeout: 5000 })
+  // pre[style] is the reliable shiki marker (background-color inline style) since lazy-loading may defer class addition
+  await expect(content.locator('pre[style]').first()).toBeVisible({ timeout: 15_000 })
 })

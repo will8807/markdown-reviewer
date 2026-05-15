@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { read } from '@/lib/sources/localSource'
+import { getRepoDir } from '@/lib/sources/gitRevisions'
+import { resolveRef, readFile } from '@/lib/sources/gitSource'
 import { renderMarkdown } from '@/lib/markdown/render'
 import ViewerClient from '@/components/ViewerClient'
 
@@ -18,10 +20,10 @@ export default async function ViewerPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string; sourceId: string }>
-  searchParams: Promise<{ path?: string }>
+  searchParams: Promise<{ path?: string; ref?: string }>
 }) {
   const { projectId, sourceId } = await params
-  const { path: filePath } = await searchParams
+  const { path: filePath, ref } = await searchParams
 
   const source = await prisma.source.findFirst({
     where: { id: sourceId, projectId },
@@ -38,7 +40,14 @@ export default async function ViewerPage({
 
   let content: string
   try {
-    content = await read(source.localPath!, filePath)
+    if (source.type === 'GIT') {
+      const repoDir = getRepoDir(source.id)
+      const sha = await resolveRef(repoDir, ref ?? 'HEAD')
+      const buf = await readFile(repoDir, sha, filePath)
+      content = buf.toString('utf8')
+    } else {
+      content = await read(source.localPath!, filePath)
+    }
   } catch (err: unknown) {
     if (err instanceof Error && /path traversal/i.test(err.message)) {
       return <div className="p-8 text-red-500">Access denied.</div>

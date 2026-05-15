@@ -45,3 +45,6 @@ next-env.d.ts
 prisma/*.db
 prisma/*.db-shm
 prisma/*.db-wal
+
+# git source clones and diff caches
+.data/

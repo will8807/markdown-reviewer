@@ -1,11 +1,14 @@
 import { setWorldConstructor, World } from '@cucumber/cucumber'
-import { Browser, BrowserContext, Page, chromium } from '@playwright/test'
+import { Browser, BrowserContext, Page, APIResponse, chromium } from '@playwright/test'
 
 export class PlaywrightWorld extends World {
   browser!: Browser
   context!: BrowserContext
   page!: Page
   baseUrl: string = 'http://localhost:3000'
+  cleanupThreadIds: string[] = []
+  cleanupSourceIds: string[] = []
+  lastApiResponse: APIResponse | null = null
 
   async openBrowser(): Promise<void> {
     this.browser = await chromium.launch()

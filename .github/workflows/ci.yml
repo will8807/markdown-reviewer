@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: file:./prisma/test.db
+
+      - name: Run unit tests
+        run: npm test
+        env:
+          DATABASE_URL: file:./prisma/test.db
+          DATABASE_URL_TEST: file:./prisma/test.db
+
+  bdd:
+    name: BDD Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: file:./prisma/bdd.db
+
+      - name: Seed database
+        id: seed
+        run: |
+          OUTPUT=$(DATABASE_URL=file:./prisma/bdd.db npm run db:seed 2>&1)
+          echo "$OUTPUT"
+          DEV_USER_ID=$(echo "$OUTPUT" | grep 'DEV_USER_ID=' | tail -1 | sed 's/.*DEV_USER_ID=//')
+          echo "dev_user_id=$DEV_USER_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: file:./prisma/bdd.db
+          DEV_USER_ID: ${{ steps.seed.outputs.dev_user_id }}
+
+      - name: Start server
+        run: npm start &
+        env:
+          DATABASE_URL: file:./prisma/bdd.db
+          DEV_USER_ID: ${{ steps.seed.outputs.dev_user_id }}
+          PORT: 3000
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000 > /dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000 > /dev/null || (echo "Server did not start" && exit 1)
+
+      - name: Run BDD tests
+        run: npm run bdd:ci
+        env:
+          DATABASE_URL: file:./prisma/bdd.db
+          DEV_USER_ID: ${{ steps.seed.outputs.dev_user_id }}

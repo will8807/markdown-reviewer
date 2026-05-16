@@ -61,7 +61,7 @@ describe('cloneOrFetch', () => {
     await expect(cloneOrFetch(originDir, bareDir)).resolves.toBeUndefined()
   })
 
-  it('throws when the source URL is unreachable', async () => {
+  it('throws when the source URL is unreachable', { timeout: 15_000 }, async () => {
     const notGit = join(tmpRoot, 'not-a-repo')
     mkdirSync(notGit, { recursive: true })
     await expect(cloneOrFetch(notGit, join(tmpRoot, 'fail.git'))).rejects.toThrow()

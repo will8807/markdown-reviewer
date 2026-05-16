@@ -28,8 +28,14 @@ Given('I am on the viewer for the demo source', async function (this: Playwright
 })
 
 Then('the file tree contains {string}', async function (this: PlaywrightWorld, filename: string) {
-  const treeLocator = this.page.locator('[data-testid="file-tree"]')
-  await expect(treeLocator.getByText(filename, { exact: false }).first()).toBeVisible({ timeout: 5000 })
+  const tree = this.page.locator('[data-testid="file-tree"]')
+  // Match by the basename within a link's href. Works for bare filenames
+  // ("setup.md" — which may actually live at guide/setup.md in the tree) and
+  // for full paths ("guide/new-page.md") since the encoded href contains the
+  // basename literally either way.
+  const basename = filename.split('/').pop() ?? filename
+  const link = tree.locator(`a[href*="${basename}"]`).first()
+  await expect(link).toBeVisible({ timeout: 5000 })
 })
 
 When('I click the file {string} in the tree', async function (this: PlaywrightWorld, filename: string) {

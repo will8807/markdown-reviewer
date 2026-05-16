@@ -48,6 +48,12 @@ export default async function ComparePage({
 
   const repoDir = getRepoDir(source.id)
 
+  // Clone (or fetch) on demand so the compare page works on first load.
+  if (source.gitUrl) {
+    const { cloneOrFetch } = await import('@/lib/sources/gitSource')
+    try { await cloneOrFetch(source.gitUrl, repoDir) } catch { /* fetch errors are non-fatal */ }
+  }
+
   let baseSha: string
   let headSha: string
   try {

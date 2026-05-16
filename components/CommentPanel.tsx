@@ -82,6 +82,7 @@ export default function CommentPanel() {
   const [submitting, setSubmitting] = useState(false)
   const [devUserId, setDevUserId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const threadListRef = useRef<HTMLUListElement>(null)
 
   const pending = filePending ?? diffPending
 
@@ -92,12 +93,27 @@ export default function CommentPanel() {
       .catch(() => null)
   }, [])
 
-  // Broadcast threads so MarkdownViewer can apply highlights
+  // Broadcast threads so MarkdownViewer / RenderedDiff can apply highlights
   useEffect(() => {
     window.dispatchEvent(
       new CustomEvent('threads-updated', { detail: { threads, activeId: activeThreadId } }),
     )
   }, [threads, activeThreadId])
+
+  // Focus a thread when a diff comment marker is clicked
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { threadId } = (e as CustomEvent<{ threadId: string }>).detail
+      setActiveThreadId(threadId)
+      // Scroll the thread card into view after React re-renders
+      requestAnimationFrame(() => {
+        const el = threadListRef.current?.querySelector<HTMLElement>(`[data-thread-id="${threadId}"]`)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+    }
+    window.addEventListener('focus-thread', handler)
+    return () => window.removeEventListener('focus-thread', handler)
+  }, [])
 
   // ── File-mode thread loading ──────────────────────────────────────────────
 
@@ -267,7 +283,7 @@ export default function CommentPanel() {
 
   const isDiffMode = diffCtx !== null
 
-  if (!isDiffMode && !fileId && !filePending) {
+  if (!isDiffMode && !fileId && !filePending && !diffPending) {
     return (
       <div className="p-4">
         <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Comments</h2>
@@ -278,7 +294,7 @@ export default function CommentPanel() {
 
   // Quote shown in the pending composer
   const composerQuote = diffPending
-    ? `${diffPending.diffSide} · lines ${diffPending.lineStart}–${diffPending.lineEnd}`
+    ? diffPending.selectedText || `${diffPending.diffSide} · lines ${diffPending.lineStart}–${diffPending.lineEnd}`
     : filePending?.anchor.selectedText ?? null
 
   return (
@@ -333,17 +349,19 @@ export default function CommentPanel() {
           {isDiffMode ? 'Click a highlighted block to add a comment.' : 'Select text to add a comment.'}
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul ref={threadListRef} className="space-y-3">
           {threads.map((thread) => {
             const isDiffThread = thread.anchor?.type === 'DIFF_HUNK'
-            const quote = isDiffThread && thread.anchor?.lineStart
-              ? `${thread.anchor.diffSide} · lines ${thread.anchor.lineStart}–${thread.anchor.lineEnd ?? thread.anchor.lineStart}`
-              : thread.anchor?.selectedText ?? null
+            const quote = thread.anchor?.selectedText
+              ?? (isDiffThread && thread.anchor?.lineStart
+                ? `${thread.anchor.diffSide} · lines ${thread.anchor.lineStart}–${thread.anchor.lineEnd ?? thread.anchor.lineStart}`
+                : null)
 
             return (
               <li
                 key={thread.id}
                 data-testid="comment-thread"
+                data-thread-id={thread.id}
                 onClick={() => setActiveThreadId((id) => (id === thread.id ? null : thread.id))}
                 className={`rounded-lg border p-3 text-sm cursor-pointer ${
                   thread.resolved

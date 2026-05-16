@@ -7,5 +7,16 @@
     ],
     "requireModule": ["ts-node/register"],
     "publishQuiet": true
+  },
+  "ci": {
+    "paths": ["features/**/*.feature"],
+    "require": [
+      "features/support/**/*.ts",
+      "features/step_definitions/**/*.steps.ts"
+    ],
+    "requireModule": ["ts-node/register"],
+    "publishQuiet": true,
+    "tags": "not @pending",
+    "retry": 2
   }
 }

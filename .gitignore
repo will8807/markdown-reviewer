@@ -30,6 +30,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# local dev/test server logs
+server.log
+server-err.log
+dev-server.log
+dev-server-err.log
+
 # env files — keep the example, ignore actual secrets
 .env*
 !.env.example

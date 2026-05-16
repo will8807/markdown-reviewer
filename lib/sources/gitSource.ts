@@ -12,12 +12,23 @@ export interface Ref {
 
 // Clone sourceUrl as a bare repo into repoDir. If repoDir already looks like a
 // bare clone (HEAD present), fetch instead so callers can call this idempotently.
+// Tolerant of concurrent calls — when one finishes after another started, the
+// loser polls for HEAD to appear instead of erroring.
 export async function cloneOrFetch(sourceUrl: string, repoDir: string): Promise<void> {
   if (existsSync(join(repoDir, 'HEAD'))) {
     await simpleGit(repoDir).fetch(['--all', '--prune'])
     return
   }
-  await simpleGit().clone(sourceUrl, repoDir, ['--bare'])
+  try {
+    await simpleGit().clone(sourceUrl, repoDir, ['--bare'])
+  } catch (err) {
+    // Another caller is mid-clone — wait briefly for HEAD to appear.
+    for (let i = 0; i < 50; i++) {
+      if (existsSync(join(repoDir, 'HEAD'))) return
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    throw err
+  }
 }
 
 // List all branches and tags in the bare repo.

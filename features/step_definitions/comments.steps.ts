@@ -1,11 +1,7 @@
 import { After, Given, When, Then } from '@cucumber/cucumber'
 import { expect } from '@playwright/test'
-import { PrismaClient } from '@prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
+import { prisma } from '../../lib/db'
 import type { PlaywrightWorld } from '../support/world'
-
-const adapter = new PrismaLibSql({ url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db' })
-const prisma = new PrismaClient({ adapter })
 
 const DEMO_SOURCE_ID = 'demo-source'
 

@@ -27,7 +27,8 @@ Feature: Git source
     Then the page contains a heading "Demo Project"
 
   Scenario: Switching ref reloads the file tree
-    Given I am on the viewer for "docs-repo" at ref "main"
+    Given the Git source "docs-repo" has been added
+    And I am on the viewer for "docs-repo" at ref "main"
     Then the file tree does not contain "guide/new-page.md"
     When I switch the ref to "feature/copyedits"
     Then the file tree contains "guide/new-page.md"

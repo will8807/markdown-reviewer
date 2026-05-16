@@ -3,6 +3,19 @@
 import { useEffect, useRef, useMemo, useCallback } from 'react'
 import type { DiffHunk } from '@/lib/diff/computeDiff'
 
+interface ThreadAnchor {
+  type: string
+  diffSide: string | null
+  lineStart: number | null
+  lineEnd: number | null
+}
+
+interface Thread {
+  id: string
+  resolved: boolean
+  anchor: ThreadAnchor | null
+}
+
 interface Props {
   sourceId: string
   filePath: string
@@ -44,6 +57,65 @@ function applyHighlights(
   }
 }
 
+function applyCommentMarkers(
+  container: HTMLElement | null,
+  threads: Thread[],
+  side: 'base' | 'head',
+) {
+  if (!container) return
+
+  // Remove stale markers
+  for (const m of container.querySelectorAll('.diff-comment-marker')) m.remove()
+
+  const openThreads = threads.filter(
+    (t) => !t.resolved && t.anchor?.type === 'DIFF_HUNK' && t.anchor.diffSide === side,
+  )
+  if (!openThreads.length) return
+
+  for (const el of container.querySelectorAll<HTMLElement>('[data-source-start]')) {
+    const blockStart = parseInt(el.dataset.sourceStart ?? '0', 10)
+    const blockEnd = parseInt(el.dataset.sourceEnd ?? '0', 10)
+
+    const matching = openThreads.filter((t) => {
+      const ls = t.anchor!.lineStart ?? 0
+      const le = t.anchor!.lineEnd ?? ls
+      return ls <= blockEnd && le >= blockStart
+    })
+    if (!matching.length) continue
+
+    // Position the parent block relatively so the badge can be absolute
+    const prev = el.style.position
+    if (!prev || prev === 'static') el.style.position = 'relative'
+
+    const badge = document.createElement('span')
+    badge.className = 'diff-comment-marker'
+    badge.dataset.threadId = matching[0].id
+    badge.title = `${matching.length} comment${matching.length > 1 ? 's' : ''}`
+    badge.textContent = String(matching.length)
+    Object.assign(badge.style, {
+      position: 'absolute',
+      top: '0',
+      right: '0',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: '1.25rem',
+      height: '1.25rem',
+      padding: '0 0.25rem',
+      borderRadius: '9999px',
+      fontSize: '0.65rem',
+      fontWeight: '700',
+      lineHeight: '1',
+      background: 'rgba(245,158,11,0.9)',
+      color: '#fff',
+      cursor: 'pointer',
+      zIndex: '10',
+      userSelect: 'none',
+    })
+    el.appendChild(badge)
+  }
+}
+
 export default function RenderedDiff({
   sourceId,
   filePath,
@@ -57,6 +129,7 @@ export default function RenderedDiff({
   const baseRef = useRef<HTMLDivElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
   const syncingRef = useRef(false)
+  const threadsRef = useRef<Thread[]>([])
 
   const baseChangedLines = useMemo(
     () => new Set(hunks.flatMap((h) => h.lines.filter((l) => l.side === 'base').map((l) => l.lineNumber))),
@@ -70,6 +143,26 @@ export default function RenderedDiff({
   // Highlight changed blocks after HTML is in the DOM
   useEffect(() => { applyHighlights(baseRef.current, baseChangedLines, 'base') }, [baseHtml, baseChangedLines])
   useEffect(() => { applyHighlights(headRef.current, headChangedLines, 'head') }, [headHtml, headChangedLines])
+
+  // Listen for thread updates and apply comment markers
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { threads } = (e as CustomEvent<{ threads: Thread[] }>).detail
+      threadsRef.current = threads
+      applyCommentMarkers(baseRef.current, threads, 'base')
+      applyCommentMarkers(headRef.current, threads, 'head')
+    }
+    window.addEventListener('threads-updated', handler)
+    return () => window.removeEventListener('threads-updated', handler)
+  }, [])
+
+  // Re-apply markers after HTML changes (new file selected)
+  useEffect(() => {
+    applyCommentMarkers(baseRef.current, threadsRef.current, 'base')
+  }, [baseHtml])
+  useEffect(() => {
+    applyCommentMarkers(headRef.current, threadsRef.current, 'head')
+  }, [headHtml])
 
   // Proportional scroll sync
   useEffect(() => {
@@ -100,17 +193,39 @@ export default function RenderedDiff({
     }
   }, [])
 
-  // Notify CommentPanel that a diff is open so it loads the right threads
+  // Notify CommentPanel that a diff is open so it loads the right threads.
+  // CommentPanel is a sibling-aside that mounts AFTER this component, so its
+  // diff-opened listener may not be attached when we first dispatch. Fire
+  // three times spread out — by 500ms, even slow hydration has registered the
+  // listener, so the last event always lands.
   useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent('diff-opened', { detail: { sourceId, filePath, baseSha, headSha } }),
-    )
+    const fire = () =>
+      window.dispatchEvent(
+        new CustomEvent('diff-opened', { detail: { sourceId, filePath, baseSha, headSha } }),
+      )
+    const t1 = setTimeout(fire, 0)
+    const t2 = setTimeout(fire, 150)
+    const t3 = setTimeout(fire, 500)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [sourceId, filePath, baseSha, headSha])
 
-  // Click-to-comment: find the closest annotated ancestor and dispatch event
+  // Click handler: marker → focus-thread; block → diff-comment-requested
   const makeClickHandler = useCallback(
     (side: 'base' | 'head') => (e: MouseEvent) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-source-start]')
+      const target = e.target as HTMLElement
+
+      // Clicked on a comment badge
+      const marker = target.closest<HTMLElement>('.diff-comment-marker')
+      if (marker) {
+        e.stopPropagation()
+        const threadId = marker.dataset.threadId
+        if (threadId) {
+          window.dispatchEvent(new CustomEvent('focus-thread', { detail: { threadId } }))
+        }
+        return
+      }
+
+      const el = target.closest<HTMLElement>('[data-source-start]')
       if (!el) return
       const lineStart = parseInt(el.dataset.sourceStart ?? '0', 10)
       const lineEnd = parseInt(el.dataset.sourceEnd ?? '0', 10)
@@ -131,16 +246,15 @@ export default function RenderedDiff({
   useEffect(() => {
     const base = baseRef.current
     const head = headRef.current
-    if (!base || !head) return
-    const baseH = makeClickHandler('base')
-    const headH = makeClickHandler('head')
-    base.addEventListener('click', baseH)
-    head.addEventListener('click', headH)
+    const baseH = base ? makeClickHandler('base') : null
+    const headH = head ? makeClickHandler('head') : null
+    if (base && baseH) base.addEventListener('click', baseH)
+    if (head && headH) head.addEventListener('click', headH)
     return () => {
-      base.removeEventListener('click', baseH)
-      head.removeEventListener('click', headH)
+      if (base && baseH) base.removeEventListener('click', baseH)
+      if (head && headH) head.removeEventListener('click', headH)
     }
-  }, [makeClickHandler])
+  }, [makeClickHandler, baseHtml, headHtml])
 
   return (
     <div className="flex h-full overflow-hidden divide-x divide-zinc-200 dark:divide-zinc-700">
@@ -152,6 +266,7 @@ export default function RenderedDiff({
         {baseHtml ? (
           <div
             ref={baseRef}
+            data-testid="diff-base-panel"
             className="flex-1 overflow-y-auto p-6 prose prose-zinc dark:prose-invert max-w-none cursor-pointer"
             // eslint-disable-next-line react/no-danger
             dangerouslySetInnerHTML={{ __html: baseHtml }}
@@ -171,6 +286,7 @@ export default function RenderedDiff({
         {headHtml ? (
           <div
             ref={headRef}
+            data-testid="diff-head-panel"
             className="flex-1 overflow-y-auto p-6 prose prose-zinc dark:prose-invert max-w-none cursor-pointer"
             // eslint-disable-next-line react/no-danger
             dangerouslySetInnerHTML={{ __html: headHtml }}

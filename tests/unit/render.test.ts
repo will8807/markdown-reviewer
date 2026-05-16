@@ -4,7 +4,10 @@ import { renderMarkdown } from '@/lib/markdown/render'
 const opts = { projectId: 'proj1', sourceId: 'src1', filePath: 'README.md' }
 
 describe('renderMarkdown', () => {
-  it('renders a heading', async () => {
+  // First render call cold-starts Shiki, which can take >5s on Windows. The
+  // other render tests benefit from the already-warm singleton, so a per-test
+  // bump only on the first one is enough.
+  it('renders a heading', { timeout: 15_000 }, async () => {
     const html = await renderMarkdown('# Hello', opts)
     expect(html).toContain('<h1')
     expect(html).toContain('Hello')

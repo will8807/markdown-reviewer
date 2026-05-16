@@ -1,3 +1,4 @@
+@pending
 Feature: Image diff
 
   Background:

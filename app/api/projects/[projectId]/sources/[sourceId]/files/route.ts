@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { read } from '@/lib/sources/localSource'
 import { getRepoDir } from '@/lib/sources/gitRevisions'
-import { resolveRef, readFile } from '@/lib/sources/gitSource'
+import { cloneOrFetch, resolveRef, readFile } from '@/lib/sources/gitSource'
+import { assertSafe } from '@/lib/sources/pathSafety'
 
 const querySchema = z.object({ path: z.string().min(1) })
 
@@ -22,16 +23,22 @@ export async function GET(
   if (!source) return Response.json({ error: 'Not found' }, { status: 404 })
 
   if (source.type === 'GIT') {
+    // Path-safety check first — never touch the filesystem with a traversal path,
+    // and never let unrelated errors (e.g. uncloned repo) swallow a 400.
+    try {
+      assertSafe('/git-root', parsed.data.path)
+    } catch {
+      return Response.json({ error: 'Forbidden' }, { status: 400 })
+    }
+
     const ref = req.nextUrl.searchParams.get('ref') ?? 'HEAD'
     const repoDir = getRepoDir(source.id)
     try {
+      if (source.gitUrl) await cloneOrFetch(source.gitUrl, repoDir)
       const sha = await resolveRef(repoDir, ref)
       const buf = await readFile(repoDir, sha, parsed.data.path)
       return Response.json({ path: parsed.data.path, content: buf.toString('utf8') })
-    } catch (err: unknown) {
-      if (err instanceof Error && /path traversal/i.test(err.message)) {
-        return Response.json({ error: 'Forbidden' }, { status: 400 })
-      }
+    } catch {
       return Response.json({ error: 'Not found' }, { status: 404 })
     }
   }

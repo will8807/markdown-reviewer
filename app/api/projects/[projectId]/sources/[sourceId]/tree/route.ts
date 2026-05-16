@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { scan } from '@/lib/sources/localSource'
 import { getRepoDir } from '@/lib/sources/gitRevisions'
-import { resolveRef, scanTree } from '@/lib/sources/gitSource'
+import { cloneOrFetch, resolveRef, scanTree } from '@/lib/sources/gitSource'
 
 export async function GET(
   req: NextRequest,
@@ -17,6 +17,7 @@ export async function GET(
     const ref = req.nextUrl.searchParams.get('ref') ?? 'HEAD'
     const repoDir = getRepoDir(source.id)
     try {
+      if (source.gitUrl) await cloneOrFetch(source.gitUrl, repoDir)
       const sha = await resolveRef(repoDir, ref)
       const files = await scanTree(repoDir, sha)
       return Response.json({ files })

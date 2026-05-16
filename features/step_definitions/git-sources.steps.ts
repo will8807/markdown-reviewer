@@ -4,12 +4,8 @@ import { execFileSync, execSync } from 'child_process'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { PrismaClient } from '@prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
+import { prisma } from '../../lib/db'
 import type { PlaywrightWorld } from '../support/world'
-
-const adapter = new PrismaLibSql({ url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db' })
-const prisma = new PrismaClient({ adapter })
 
 const DEMO_PROJECT_ID = 'demo-project'
 
@@ -98,6 +94,7 @@ Given('I am on the viewer for {string} at ref {string}', async function (
 ) {
   const source = await prisma.source.findFirst({
     where: { name: sourceName, projectId: DEMO_PROJECT_ID },
+    orderBy: { createdAt: 'desc' },
   })
   if (!source) throw new Error(`Source "${sourceName}" not found`)
   await this.page.goto(
@@ -144,6 +141,7 @@ When('I open the revision picker for {string}', async function (
   // Navigate to the source viewer first so the picker is visible.
   const source = await prisma.source.findFirst({
     where: { name: _sourceName, projectId: DEMO_PROJECT_ID },
+    orderBy: { createdAt: 'desc' },
   })
   if (!source) throw new Error(`Source "${_sourceName}" not found`)
   await this.page.goto(
@@ -159,6 +157,7 @@ When('I open the viewer for {string} at ref {string}', async function (
 ) {
   const source = await prisma.source.findFirst({
     where: { name: sourceName, projectId: DEMO_PROJECT_ID },
+    orderBy: { createdAt: 'desc' },
   })
   if (!source) throw new Error(`Source "${sourceName}" not found`)
   await this.page.goto(
@@ -168,8 +167,22 @@ When('I open the viewer for {string} at ref {string}', async function (
 })
 
 When('I switch the ref to {string}', async function (this: PlaywrightWorld, ref: string) {
+  // The refs dropdown is populated by an async fetch on mount. Wait for the
+  // target option to actually exist before trying to select it, otherwise
+  // selectOption hangs waiting on Playwright's default action timeout.
+  // <option> is never "visible" in Playwright's sense (it lives inside a
+  // collapsed <select>), so wait for "attached" instead.
+  await this.page
+    .locator(`[data-testid="ref-select"] option[value="${ref}"]`)
+    .waitFor({ state: 'attached', timeout: 15_000 })
   await this.page.getByTestId('ref-select').selectOption(ref)
-  await this.page.waitForLoadState('networkidle')
+  // router.replace is async; wait for the URL to reflect the new ref. Don't
+  // wait for networkidle — long-running client effects can keep the network
+  // "busy" past Cucumber's 30s step timeout. The next assertion has its own
+  // wait for the tree to finish re-rendering.
+  await this.page.waitForURL((url) => url.search.includes(`ref=${encodeURIComponent(ref)}`), {
+    timeout: 5_000,
+  })
 })
 
 When(
@@ -199,8 +212,9 @@ Then('the source list shows {string} as a Git source', async function (
   this: PlaywrightWorld,
   name: string,
 ) {
+  // toContainText is case-sensitive, so "GIT" won't match "git" in the fixture path
   const card = this.page.getByTestId('source-list').locator('[data-testid="source-card"]').filter({ hasText: name })
-  await expect(card.getByText('GIT', { exact: false })).toBeVisible({ timeout: 5000 })
+  await expect(card).toContainText('GIT', { timeout: 5000 })
 })
 
 Then('the revision picker lists the branch {string}', async function (
@@ -216,7 +230,10 @@ Then('the file tree does not contain {string}', async function (
   filename: string,
 ) {
   const tree = this.page.locator('[data-testid="file-tree"]')
-  await expect(tree.getByText(filename, { exact: false })).not.toBeVisible({ timeout: 5000 })
+  // Match by basename in href (mirror of "the file tree contains")
+  const basename = filename.split('/').pop() ?? filename
+  const link = tree.locator(`a[href*="${basename}"]`)
+  await expect(link).not.toBeVisible({ timeout: 5000 })
 })
 
 Then('I see an error message about the repository being unreachable', async function (

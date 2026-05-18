@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['sharp', '@libsql/client'],
+  serverExternalPackages: ['sharp'],
 };
 
 export default nextConfig;

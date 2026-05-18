@@ -1,11 +1,22 @@
+import { createClient } from '@libsql/client'
 import { PrismaClient } from '@prisma/client'
 import { PrismaLibSql } from '@prisma/adapter-libsql'
 import path from 'path'
 
-const adapter = new PrismaLibSql({ url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db' })
+const dbUrl = process.env.DATABASE_URL ?? 'file:./prisma/dev.db'
+
+async function enableWAL() {
+  const client = createClient({ url: dbUrl })
+  await client.execute('PRAGMA journal_mode=WAL')
+  await client.execute('PRAGMA busy_timeout=10000')
+  client.close()
+}
+
+const adapter = new PrismaLibSql({ url: dbUrl })
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
+  await enableWAL()
   const user = await prisma.user.upsert({
     where: { email: 'dev@localhost' },
     update: {},

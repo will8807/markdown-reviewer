@@ -27,7 +27,12 @@ export default defineConfig({
     include: ['tests/unit/**/*.test.{ts,tsx}'],
     // DB integration tests use DATABASE_URL_TEST; swap the env var at test time.
     env: {
-      DATABASE_URL: env.DATABASE_URL_TEST ?? env.DATABASE_URL ?? '',
+      DATABASE_URL:
+        process.env.DATABASE_URL_TEST ??
+        process.env.DATABASE_URL ??
+        env.DATABASE_URL_TEST ??
+        env.DATABASE_URL ??
+        '',
     },
     coverage: {
       provider: 'v8',

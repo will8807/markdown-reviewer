@@ -3,8 +3,14 @@ import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { readBuffer } from '@/lib/sources/localSource'
+import { getRepoDir } from '@/lib/sources/gitRevisions'
+import { cloneOrFetch, resolveRef, readFile } from '@/lib/sources/gitSource'
+import { assertSafe } from '@/lib/sources/pathSafety'
 
-const querySchema = z.object({ path: z.string().min(1) })
+const querySchema = z.object({
+  path: z.string().min(1),
+  ref: z.string().optional(),
+})
 
 const MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -18,7 +24,7 @@ const MIME: Record<string, string> = {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ projectId: string; sourceId: string }> }
+  { params }: { params: Promise<{ projectId: string; sourceId: string }> },
 ) {
   const { projectId, sourceId } = await params
 
@@ -27,14 +33,41 @@ export async function GET(
 
   const source = await prisma.source.findFirst({ where: { id: sourceId, projectId } })
   if (!source) return Response.json({ error: 'Not found' }, { status: 404 })
-  if (source.type !== 'LOCAL' || !source.localPath) {
+
+  const ext = path.extname(parsed.data.path).toLowerCase()
+  const contentType = MIME[ext] ?? 'application/octet-stream'
+
+  if (source.type === 'GIT') {
+    try {
+      assertSafe('/git-root', parsed.data.path)
+    } catch {
+      return Response.json({ error: 'Forbidden' }, { status: 400 })
+    }
+
+    const ref = parsed.data.ref ?? 'HEAD'
+    const repoDir = getRepoDir(source.id)
+    try {
+      if (source.gitUrl) await cloneOrFetch(source.gitUrl, repoDir)
+      const sha = await resolveRef(repoDir, ref)
+      const buf = await readFile(repoDir, sha, parsed.data.path)
+      // Ref resolved to a SHA so the URL is content-addressed — cache forever.
+      return new Response(new Uint8Array(buf), {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      })
+    } catch {
+      return Response.json({ error: 'Not found' }, { status: 404 })
+    }
+  }
+
+  if (!source.localPath) {
     return Response.json({ error: 'Source has no local path' }, { status: 400 })
   }
 
   try {
     const buf = await readBuffer(source.localPath, parsed.data.path)
-    const ext = path.extname(parsed.data.path).toLowerCase()
-    const contentType = MIME[ext] ?? 'application/octet-stream'
     return new Response(new Uint8Array(buf), { headers: { 'Content-Type': contentType } })
   } catch (err: unknown) {
     if (err instanceof Error && /path traversal/i.test(err.message)) {

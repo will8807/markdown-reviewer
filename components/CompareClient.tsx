@@ -4,7 +4,14 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DiffFileList from './DiffFileList'
 import RenderedDiff from './RenderedDiff'
+import ImageDiff from './ImageDiff'
 import type { ChangedFile, DiffHunk } from '@/lib/diff/computeDiff'
+
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
+function isImagePath(p: string) {
+  const dot = p.lastIndexOf('.')
+  return dot !== -1 && IMAGE_EXTS.has(p.slice(dot).toLowerCase())
+}
 
 interface RefInfo {
   name: string
@@ -106,14 +113,31 @@ export default function CompareClient({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <DiffFileList files={files} activePath={activePath} onSelect={handleFileSelect} />
+          <DiffFileList
+            files={files}
+            activePath={activePath}
+            onSelect={handleFileSelect}
+            projectId={projectId}
+            sourceId={sourceId}
+            baseSha={baseSha}
+            headSha={headSha}
+          />
         </div>
       </div>
 
       {/* Right: rendered diff or empty state */}
       <div className="flex-1 overflow-hidden" data-testid="diff-view">
         {activePath && activeFileDiff && baseSha && headSha ? (
-          activeFileDiff.isBinary ? (
+          isImagePath(activePath) ? (
+            <ImageDiff
+              projectId={projectId}
+              sourceId={sourceId}
+              filePath={activePath}
+              baseSha={baseSha}
+              headSha={headSha}
+              status={activeFileDiff.status}
+            />
+          ) : activeFileDiff.isBinary ? (
             <div className="p-8 text-sm text-zinc-500">
               <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-1">Binary file</p>
               <p className="font-mono text-xs">{activePath}</p>

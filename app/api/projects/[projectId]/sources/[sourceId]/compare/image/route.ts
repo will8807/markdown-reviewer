@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { getRepoDir } from '@/lib/sources/gitRevisions'
-import { resolveRef, readFile } from '@/lib/sources/gitSource'
+import { cloneOrFetch, resolveRef, readFile } from '@/lib/sources/gitSource'
 import { assertSafe } from '@/lib/sources/pathSafety'
 
 const querySchema = z.object({
@@ -75,6 +75,9 @@ export async function GET(
   if (!source) return Response.json({ error: 'Not found' }, { status: 404 })
 
   const repoDir = getRepoDir(source.id)
+  if (source.gitUrl) {
+    try { await cloneOrFetch(source.gitUrl, repoDir) } catch { /* non-fatal; proceed */ }
+  }
   let baseSha: string
   let headSha: string
   try {

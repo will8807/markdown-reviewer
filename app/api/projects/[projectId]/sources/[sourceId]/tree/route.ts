@@ -21,9 +21,8 @@ export async function GET(
       const sha = await resolveRef(repoDir, ref)
       const files = await scanTree(repoDir, sha)
       return Response.json({ files })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'git error'
-      return Response.json({ error: msg }, { status: 502 })
+    } catch {
+      return Response.json({ error: 'Unable to connect to git repository. Check that the URL is reachable.' }, { status: 502 })
     }
   }
 

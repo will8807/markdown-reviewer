@@ -29,9 +29,21 @@ export async function addComment(threadId: string, authorId: string, body: strin
   })
 }
 
-export async function listThreadsForFile(fileId: string) {
+export async function listThreadsForFile(
+  fileId: string,
+  opts?: { sourceId: string; filePath: string },
+) {
+  // Include threads anchored to this fileId AND threads from compare mode
+  // (fileId = null) that share the same source + file path.
   return prisma.commentThread.findMany({
-    where: { fileId },
+    where: {
+      OR: [
+        { fileId },
+        ...(opts
+          ? [{ sourceId: opts.sourceId, fileId: null, anchor: { filePath: opts.filePath } }]
+          : []),
+      ],
+    },
     include: {
       anchor: true,
       comments: {

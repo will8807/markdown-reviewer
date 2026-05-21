@@ -6,6 +6,7 @@ import {
   addComment,
   listThreadsForFile,
   setThreadResolved,
+  setThreadStatus,
 } from '@/lib/api/threads'
 
 // Requires DATABASE_URL_TEST pointing at the test schema.
@@ -109,6 +110,47 @@ describe('listThreadsForFile', () => {
   it('returns an empty array when no threads exist', async () => {
     const threads = await listThreadsForFile(fileId)
     expect(threads).toHaveLength(0)
+  })
+})
+
+describe('setThreadStatus', () => {
+  it('new threads default to OPEN', async () => {
+    const thread = await createCommentThread(sourceId, fileId, {
+      type: 'TEXT_SELECTION',
+      filePath: 'README.md',
+    })
+    expect(thread.status).toBe('OPEN')
+  })
+
+  it('sets status to ACCEPTED', async () => {
+    const thread = await createCommentThread(sourceId, fileId, {
+      type: 'TEXT_SELECTION',
+      filePath: 'README.md',
+    })
+    const updated = await setThreadStatus(thread.id, 'ACCEPTED')
+    expect(updated.status).toBe('ACCEPTED')
+  })
+
+  it('sets status to REJECTED', async () => {
+    const thread = await createCommentThread(sourceId, fileId, {
+      type: 'TEXT_SELECTION',
+      filePath: 'README.md',
+    })
+    const updated = await setThreadStatus(thread.id, 'REJECTED')
+    expect(updated.status).toBe('REJECTED')
+  })
+
+  it('sets status to DISCUSS', async () => {
+    const thread = await createCommentThread(sourceId, fileId, {
+      type: 'TEXT_SELECTION',
+      filePath: 'README.md',
+    })
+    const updated = await setThreadStatus(thread.id, 'DISCUSS')
+    expect(updated.status).toBe('DISCUSS')
+  })
+
+  it('throws on an unknown thread id', async () => {
+    await expect(setThreadStatus('nonexistent-id', 'ACCEPTED')).rejects.toThrow()
   })
 })
 

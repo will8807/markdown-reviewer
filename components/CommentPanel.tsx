@@ -33,8 +33,11 @@ interface Anchor {
   imgH: number | null
 }
 
+type ThreadStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED' | 'DISCUSS'
+
 interface Thread {
   id: string
+  status: ThreadStatus
   resolved: boolean
   resolvedAt: string | null
   anchor: Anchor | null
@@ -345,6 +348,17 @@ export default function CommentPanel() {
     else if (diffCtx) refreshDiffThreads(diffCtx)
   }
 
+  const changeStatus = async (thread: Thread, status: ThreadStatus) => {
+    const next = thread.status === status ? 'OPEN' : status
+    await fetch(`/api/comment-threads/${thread.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: next }),
+    })
+    if (fileId) refreshFileThreads(fileId)
+    else if (diffCtx) refreshDiffThreads(diffCtx)
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const isDiffMode = diffCtx !== null
@@ -444,11 +458,23 @@ export default function CommentPanel() {
                       : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
                   }`}
                 >
-                  {quote && (
-                    <blockquote className="mb-2 border-l-2 border-zinc-300 pl-2 text-xs text-zinc-500 italic truncate">
-                      {quote}
-                    </blockquote>
-                  )}
+                  {/* Header row: quote + status badge */}
+                  <div className="flex items-start gap-2 mb-2">
+                    {quote && (
+                      <blockquote className="flex-1 border-l-2 border-zinc-300 pl-2 text-xs text-zinc-500 italic truncate">
+                        {quote}
+                      </blockquote>
+                    )}
+                    {thread.status !== 'OPEN' && (
+                      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none ${
+                        thread.status === 'ACCEPTED' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                        thread.status === 'REJECTED' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                        'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300'
+                      }`}>
+                        {thread.status}
+                      </span>
+                    )}
+                  </div>
                   <ul className="space-y-2">
                     {thread.comments.map((c) => (
                       <li key={c.id}>
@@ -457,12 +483,30 @@ export default function CommentPanel() {
                       </li>
                     ))}
                   </ul>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleResolved(thread) }}
-                    className="mt-2 text-xs text-zinc-400 hover:text-zinc-600 underline"
-                  >
-                    {thread.resolved ? 'Reopen' : 'Resolve'}
-                  </button>
+                  {/* Status controls */}
+                  <div className="mt-2 flex items-center gap-1 flex-wrap">
+                    {(['ACCEPTED', 'REJECTED', 'DISCUSS'] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={(e) => { e.stopPropagation(); changeStatus(thread, s) }}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors ${
+                          thread.status === s
+                            ? s === 'ACCEPTED' ? 'border-green-500 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                              s === 'REJECTED' ? 'border-red-500 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                              'border-amber-500 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300'
+                            : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-400'
+                        }`}
+                      >
+                        {s === 'ACCEPTED' ? 'Accept' : s === 'REJECTED' ? 'Reject' : 'Discuss'}
+                      </button>
+                    ))}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleResolved(thread) }}
+                      className="ml-auto text-xs text-zinc-400 hover:text-zinc-600 underline"
+                    >
+                      {thread.resolved ? 'Reopen' : 'Resolve'}
+                    </button>
+                  </div>
                 </li>
               )
             })}

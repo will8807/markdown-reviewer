@@ -36,3 +36,11 @@ Feature: Comments
     When I click the file "README.md" in the tree
     And I click the thread quoting "Demo Project" in the comment panel
     Then the document has the "comment-thread-active" highlight applied
+
+  Scenario: Marking a thread as Accepted
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click the "Accept" status button on the thread quoting "Demo Project"
+    Then the thread quoting "Demo Project" shows the badge "ACCEPTED"
+    And after reloading the page the thread quoting "Demo Project" still shows the badge "ACCEPTED"

@@ -1,9 +1,14 @@
 import { z } from 'zod'
-import { setThreadResolved } from '@/lib/api/threads'
+import { setThreadResolved, setThreadStatus } from '@/lib/api/threads'
 
-const bodySchema = z.object({
-  resolved: z.boolean(),
-})
+const bodySchema = z
+  .object({
+    resolved: z.boolean().optional(),
+    status: z.enum(['OPEN', 'ACCEPTED', 'REJECTED', 'DISCUSS']).optional(),
+  })
+  .refine((d) => d.resolved !== undefined || d.status !== undefined, {
+    message: 'At least one of resolved or status is required',
+  })
 
 export async function PATCH(
   req: Request,
@@ -24,7 +29,13 @@ export async function PATCH(
   }
 
   try {
-    const thread = await setThreadResolved(id, parsed.data.resolved)
+    let thread
+    if (parsed.data.status !== undefined) {
+      thread = await setThreadStatus(id, parsed.data.status)
+    }
+    if (parsed.data.resolved !== undefined) {
+      thread = await setThreadResolved(id, parsed.data.resolved)
+    }
     return Response.json(thread)
   } catch {
     return Response.json({ error: 'Thread not found' }, { status: 404 })

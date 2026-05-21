@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import type { Prisma } from '@prisma/client'
+import type { Prisma, ThreadStatus } from '@prisma/client'
 
 export async function findFileByPath(sourceId: string, filePath: string) {
   return prisma.fileEntry.findUnique({
@@ -50,6 +50,13 @@ export async function setThreadResolved(threadId: string, resolved: boolean) {
       resolved,
       resolvedAt: resolved ? new Date() : null,
     },
+  })
+}
+
+export async function setThreadStatus(threadId: string, status: ThreadStatus) {
+  return prisma.commentThread.update({
+    where: { id: threadId },
+    data: { status },
   })
 }
 

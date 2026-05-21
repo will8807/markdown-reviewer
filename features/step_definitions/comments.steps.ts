@@ -116,3 +116,39 @@ When('I click the thread quoting {string} in the comment panel', async function 
   const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
   await thread.click()
 })
+
+When('I click the {string} status button on the thread quoting {string}', async function (
+  this: PlaywrightWorld,
+  label: string,
+  text: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
+  await thread.getByRole('button', { name: label }).click()
+  await this.page.waitForLoadState('networkidle')
+})
+
+Then('the thread quoting {string} shows the badge {string}', async function (
+  this: PlaywrightWorld,
+  text: string,
+  badge: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
+  await expect(thread.locator(`text=${badge}`)).toBeVisible({ timeout: 5000 })
+})
+
+Then('after reloading the page the thread quoting {string} still shows the badge {string}', async function (
+  this: PlaywrightWorld,
+  text: string,
+  badge: string,
+) {
+  await this.page.reload()
+  await this.page.waitForLoadState('networkidle')
+  // Re-open the file to load threads into the panel
+  await this.page.locator('[data-testid="file-tree"] a').filter({ hasText: 'README.md' }).click()
+  await this.page.waitForLoadState('networkidle')
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
+  await expect(thread.locator(`text=${badge}`)).toBeVisible({ timeout: 5000 })
+})

@@ -102,6 +102,9 @@ export default function CommentPanel() {
   const [body, setBody] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [devUserId, setDevUserId] = useState<string | null>(null)
+  const [replyThreadId, setReplyThreadId] = useState<string | null>(null)
+  const [replyBody, setReplyBody] = useState('')
+  const [replySubmitting, setReplySubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const threadListRef = useRef<HTMLUListElement>(null)
 
@@ -348,6 +351,24 @@ export default function CommentPanel() {
     else if (diffCtx) refreshDiffThreads(diffCtx)
   }
 
+  const submitReply = async (threadId: string) => {
+    if (!replyBody.trim() || !devUserId) return
+    setReplySubmitting(true)
+    try {
+      await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId, authorId: devUserId, body: replyBody.trim() }),
+      })
+      setReplyThreadId(null)
+      setReplyBody('')
+      if (fileId) refreshFileThreads(fileId)
+      else if (diffCtx) refreshDiffThreads(diffCtx)
+    } finally {
+      setReplySubmitting(false)
+    }
+  }
+
   const changeStatus = async (thread: Thread, status: ThreadStatus) => {
     const next = thread.status === status ? 'OPEN' : status
     await fetch(`/api/comment-threads/${thread.id}`, {
@@ -483,6 +504,47 @@ export default function CommentPanel() {
                       </li>
                     ))}
                   </ul>
+                  {/* Reply composer — shown for the active thread */}
+                  {activeThreadId === thread.id && (
+                    replyThreadId === thread.id ? (
+                      <div className="mt-2 space-y-1">
+                        <textarea
+                          value={replyBody}
+                          onChange={(e) => setReplyBody(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitReply(thread.id)
+                            if (e.key === 'Escape') { setReplyThreadId(null); setReplyBody('') }
+                          }}
+                          placeholder="Reply…"
+                          rows={2}
+                          className="w-full rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          autoFocus
+                        />
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setReplyThreadId(null); setReplyBody('') }}
+                            className="text-xs text-zinc-400 hover:text-zinc-600 px-1"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); submitReply(thread.id) }}
+                            disabled={!replyBody.trim() || replySubmitting}
+                            className="rounded bg-blue-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+                          >
+                            {replySubmitting ? 'Saving…' : 'Reply'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setReplyThreadId(thread.id); setReplyBody('') }}
+                        className="mt-2 text-xs text-blue-500 hover:text-blue-700"
+                      >
+                        Reply
+                      </button>
+                    )
+                  )}
                   {/* Status controls */}
                   <div className="mt-2 flex items-center gap-1 flex-wrap">
                     {(['ACCEPTED', 'REJECTED', 'DISCUSS'] as const).map((s) => (

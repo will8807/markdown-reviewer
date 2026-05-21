@@ -37,6 +37,16 @@ Feature: Comments
     And I click the thread quoting "Demo Project" in the comment panel
     Then the document has the "comment-thread-active" highlight applied
 
+  Scenario: Replying to an existing thread
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click the thread quoting "Demo Project" in the comment panel
+    And I click "Reply" on the thread quoting "Demo Project"
+    And I type "This is my reply" in the reply composer for "Demo Project"
+    And I submit the reply for "Demo Project"
+    Then the comment panel shows the reply "This is my reply" in the thread quoting "Demo Project"
+
   Scenario: Marking a thread as Accepted
     Given a comment thread exists on "README.md" anchoring "Demo Project"
     And I am on the viewer for the demo source

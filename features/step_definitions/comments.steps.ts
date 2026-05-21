@@ -117,6 +117,43 @@ When('I click the thread quoting {string} in the comment panel', async function 
   await thread.click()
 })
 
+When('I click {string} on the thread quoting {string}', async function (
+  this: PlaywrightWorld,
+  buttonLabel: string,
+  text: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
+  await thread.getByRole('button', { name: buttonLabel }).click()
+})
+
+When('I type {string} in the reply composer for {string}', async function (
+  this: PlaywrightWorld,
+  replyText: string,
+  _threadText: string,
+) {
+  const textarea = this.page.getByPlaceholder('Reply…')
+  await textarea.fill(replyText)
+})
+
+When('I submit the reply for {string}', async function (
+  this: PlaywrightWorld,
+  _threadText: string,
+) {
+  await this.page.getByRole('button', { name: 'Reply' }).click()
+  await this.page.waitForLoadState('networkidle')
+})
+
+Then('the comment panel shows the reply {string} in the thread quoting {string}', async function (
+  this: PlaywrightWorld,
+  replyText: string,
+  threadText: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: threadText })
+  await expect(thread.getByText(replyText, { exact: false })).toBeVisible({ timeout: 5000 })
+})
+
 When('I click the {string} status button on the thread quoting {string}', async function (
   this: PlaywrightWorld,
   label: string,

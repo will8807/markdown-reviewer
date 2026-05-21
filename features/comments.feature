@@ -47,6 +47,24 @@ Feature: Comments
     And I submit the reply for "Demo Project"
     Then the comment panel shows the reply "This is my reply" in the thread quoting "Demo Project"
 
+  Scenario: Filtering comments by status
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click the "Accept" status button on the thread quoting "Demo Project"
+    And I click the "accepted" status filter
+    Then the comment panel shows the thread quoting "Demo Project"
+    When I click the "open" status filter
+    Then the comment panel shows no threads matching the filter
+
+  Scenario: Sorting comments by date
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    Then the sort toggle shows "Oldest first"
+    When I click the sort toggle
+    Then the sort toggle shows "Newest first"
+
   Scenario: Marking a thread as Accepted
     Given a comment thread exists on "README.md" anchoring "Demo Project"
     And I am on the viewer for the demo source

@@ -175,6 +175,36 @@ Then('the thread quoting {string} shows the badge {string}', async function (
   await expect(thread.locator(`text=${badge}`)).toBeVisible({ timeout: 5000 })
 })
 
+When('I click the {string} status filter', async function (
+  this: PlaywrightWorld,
+  filter: string,
+) {
+  await this.page.getByTestId(`status-filter-${filter}`).click()
+  await this.page.waitForTimeout(300)
+})
+
+Then('the comment panel shows the thread quoting {string}', async function (
+  this: PlaywrightWorld,
+  text: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  await expect(panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })).toBeVisible({ timeout: 5000 })
+})
+
+Then('the comment panel shows no threads matching the filter', async function (this: PlaywrightWorld) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  await expect(panel.getByText('No threads match the current filters.')).toBeVisible({ timeout: 5000 })
+})
+
+Then('the sort toggle shows {string}', async function (this: PlaywrightWorld, label: string) {
+  await expect(this.page.getByTestId('sort-toggle')).toHaveText(label, { timeout: 5000 })
+})
+
+When('I click the sort toggle', async function (this: PlaywrightWorld) {
+  await this.page.getByTestId('sort-toggle').click()
+  await this.page.waitForTimeout(200)
+})
+
 Then('after reloading the page the thread quoting {string} still shows the badge {string}', async function (
   this: PlaywrightWorld,
   text: string,

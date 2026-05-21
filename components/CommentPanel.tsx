@@ -1,14 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import type { serializeSelection } from '@/lib/anchors/textAnchor'
+import { filterThreads, sortThreads, type StatusFilter } from '@/lib/comments/threadFilters'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface CommentAuthor { name: string }
+interface CommentAuthor { id: string; name: string }
 
 interface Comment {
   id: string
@@ -40,6 +41,7 @@ interface Thread {
   status: ThreadStatus
   resolved: boolean
   resolvedAt: string | null
+  createdAt: string
   anchor: Anchor | null
   comments: Comment[]
 }
@@ -105,6 +107,9 @@ export default function CommentPanel() {
   const [replyThreadId, setReplyThreadId] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState('')
   const [replySubmitting, setReplySubmitting] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [authorFilter, setAuthorFilter] = useState<string>('all')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const threadListRef = useRef<HTMLUListElement>(null)
 
@@ -380,6 +385,26 @@ export default function CommentPanel() {
     else if (diffCtx) refreshDiffThreads(diffCtx)
   }
 
+  // ── Filter / sort ─────────────────────────────────────────────────────────
+
+  const authors = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const t of threads) {
+      for (const c of t.comments) {
+        if (!seen.has(c.author.id)) seen.set(c.author.id, c.author.name)
+      }
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }))
+  }, [threads])
+
+  const visibleThreads = useMemo(() => {
+    const filtered = filterThreads(threads, {
+      status: statusFilter,
+      authorId: authorFilter !== 'all' ? authorFilter : undefined,
+    })
+    return sortThreads(filtered, sortDir)
+  }, [threads, statusFilter, authorFilter, sortDir])
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const isDiffMode = diffCtx !== null
@@ -449,14 +474,60 @@ export default function CommentPanel() {
           </div>
         )}
 
+        {/* Filter / sort toolbar */}
+        {threads.length > 0 && (
+          <div className="space-y-1.5" data-testid="comment-toolbar">
+            <div className="flex gap-1 flex-wrap">
+              {(['all', 'open', 'accepted', 'rejected', 'discuss', 'resolved'] as const).map((s) => (
+                <button
+                  key={s}
+                  data-testid={`status-filter-${s}`}
+                  onClick={() => setStatusFilter(s)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium capitalize transition-colors ${
+                    statusFilter === s
+                      ? 'border-blue-500 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                      : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-400'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 items-center">
+              {authors.length > 0 && (
+                <select
+                  data-testid="author-filter"
+                  value={authorFilter}
+                  onChange={(e) => setAuthorFilter(e.target.value)}
+                  className="flex-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-1.5 py-0.5 text-xs focus:outline-none"
+                >
+                  <option value="all">All authors</option>
+                  {authors.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                data-testid="sort-toggle"
+                onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-400 whitespace-nowrap"
+              >
+                {sortDir === 'asc' ? 'Oldest first' : 'Newest first'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Thread list */}
         {threads.length === 0 && !pending ? (
           <p className="text-sm text-zinc-400 italic">
             {isDiffMode ? 'Highlight text in the diff, then click Add Comment.' : 'Select text to add a comment.'}
           </p>
+        ) : visibleThreads.length === 0 && !pending ? (
+          <p className="text-sm text-zinc-400 italic">No threads match the current filters.</p>
         ) : (
           <ul ref={threadListRef} className="space-y-3">
-            {threads.map((thread) => {
+            {visibleThreads.map((thread) => {
               const anchorType = thread.anchor?.type
               const quote = anchorType === 'IMAGE_REGION'
                 ? `Region on ${thread.anchor?.diffSide}`

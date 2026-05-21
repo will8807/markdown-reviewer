@@ -125,40 +125,22 @@ function TreeNodes({
 }
 
 function RefPicker({
-  projectId,
-  sourceId,
+  refs,
   currentRef,
+  onChange,
 }: {
-  projectId: string
-  sourceId: string
+  refs: RefInfo[]
   currentRef: string | null
+  onChange: (ref: string) => void
 }) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [refs, setRefs] = useState<RefInfo[]>([])
-
-  useEffect(() => {
-    fetch(`/api/projects/${projectId}/sources/${sourceId}/refs`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setRefs(data?.refs ?? []))
-      .catch(() => {})
-  }, [projectId, sourceId])
-
   if (refs.length === 0) return null
-
   const value = currentRef ?? refs[0]?.name ?? ''
-  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const params = new URLSearchParams(searchParams?.toString() ?? '')
-    params.set('ref', e.target.value)
-    router.replace(`/projects/${projectId}/sources/${sourceId}?${params.toString()}`)
-  }
-
   return (
     <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-700 space-y-1.5">
       <select
         data-testid="ref-select"
         value={value}
-        onChange={handleChange}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
         {refs.map((r) => (
@@ -174,14 +156,27 @@ function RefPicker({
 export default function FileTree() {
   const params = useParams<{ projectId: string; sourceId: string }>()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [files, setFiles] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [refs, setRefs] = useState<RefInfo[]>([])
   const [threadCounts, setThreadCounts] = useState<Record<string, ThreadCounts>>({})
 
   const projectId = params?.projectId
   const sourceId = params?.sourceId
   const currentPath = searchParams?.get('path') ?? null
   const ref = searchParams?.get('ref') ?? null
+
+  // Resolve current ref to its SHA for filtering DIFF_HUNK thread counts
+  const currentSha = refs.find((r) => r.name === ref)?.sha ?? null
+
+  useEffect(() => {
+    if (!projectId || !sourceId) return
+    fetch(`/api/projects/${projectId}/sources/${sourceId}/refs`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { refs?: RefInfo[] } | null) => setRefs(data?.refs ?? []))
+      .catch(() => {})
+  }, [projectId, sourceId])
 
   useEffect(() => {
     if (!projectId || !sourceId) return
@@ -197,24 +192,29 @@ export default function FileTree() {
 
   const fetchCounts = useCallback(() => {
     if (!projectId || !sourceId) return
-    fetch(`/api/projects/${projectId}/sources/${sourceId}/thread-counts`)
+    const p = new URLSearchParams()
+    if (currentSha) p.set('sha', currentSha)
+    fetch(`/api/projects/${projectId}/sources/${sourceId}/thread-counts?${p}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { counts?: Record<string, ThreadCounts> } | null) => {
         if (data?.counts) setThreadCounts(data.counts)
       })
       .catch(() => {})
-  }, [projectId, sourceId])
+  }, [projectId, sourceId, currentSha])
 
-  useEffect(() => {
-    fetchCounts()
-  }, [fetchCounts])
+  useEffect(() => { fetchCounts() }, [fetchCounts])
 
-  // Refresh counts whenever threads change (CommentPanel broadcasts this)
   useEffect(() => {
     const handler = () => fetchCounts()
     window.addEventListener('threads-updated', handler)
     return () => window.removeEventListener('threads-updated', handler)
   }, [fetchCounts])
+
+  const handleRefChange = useCallback((newRef: string) => {
+    const p = new URLSearchParams(searchParams?.toString() ?? '')
+    p.set('ref', newRef)
+    router.replace(`/projects/${projectId}/sources/${sourceId}?${p.toString()}`)
+  }, [router, searchParams, projectId, sourceId])
 
   if (!projectId || !sourceId) return null
   if (error) return <p className="p-4 text-sm text-red-500">{error}</p>
@@ -223,7 +223,7 @@ export default function FileTree() {
 
   return (
     <div>
-      <RefPicker projectId={projectId} sourceId={sourceId} currentRef={ref} />
+      <RefPicker refs={refs} currentRef={ref} onChange={handleRefChange} />
       <nav className="p-3" aria-label="File tree">
         <TreeNodes
           nodes={tree}

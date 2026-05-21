@@ -12,16 +12,17 @@ interface Props {
   sourceContent: string
   filePath: string
   fileId: string | null
+  sha: string | null
 }
 
-export default function ViewerClient({ html, sourceContent, filePath, fileId }: Props) {
+export default function ViewerClient({ html, sourceContent, filePath, fileId, sha }: Props) {
   const params = useParams<{ projectId: string; sourceId: string }>()
 
   useEffect(() => {
     if (!fileId) return
-    setPanelContext({ type: 'file', fileId })
-    window.dispatchEvent(new CustomEvent('file-opened', { detail: { fileId } }))
-  }, [fileId])
+    setPanelContext({ type: 'file', fileId, sha: sha ?? undefined })
+    window.dispatchEvent(new CustomEvent('file-opened', { detail: { fileId, sha } }))
+  }, [fileId, sha])
 
   const handleCreateThread = useCallback(
     (anchor: ReturnType<typeof serializeSelection>) => {

@@ -39,11 +39,12 @@ export default async function ViewerPage({
   }
 
   let content: string
+  let resolvedSha: string | null = null
   try {
     if (source.type === 'GIT') {
       const repoDir = getRepoDir(source.id)
-      const sha = await resolveRef(repoDir, ref ?? 'HEAD')
-      const buf = await readFile(repoDir, sha, filePath)
+      resolvedSha = await resolveRef(repoDir, ref ?? 'HEAD')
+      const buf = await readFile(repoDir, resolvedSha, filePath)
       content = buf.toString('utf8')
     } else {
       content = await read(source.localPath!, filePath)
@@ -75,6 +76,7 @@ export default async function ViewerPage({
       sourceContent={content}
       filePath={filePath}
       fileId={fileId}
+      sha={resolvedSha}
     />
   )
 }

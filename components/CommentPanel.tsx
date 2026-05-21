@@ -96,6 +96,7 @@ export default function CommentPanel() {
   const [threads, setThreads] = useState<Thread[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [fileId, setFileId] = useState<string | null>(null)
+  const [viewerSha, setViewerSha] = useState<string | null>(null)
   const [diffCtx, setDiffCtx] = useState<DiffContext | null>(null)
 
   const [filePending, setFilePending] = useState<FilePendingComposer | null>(null)
@@ -115,7 +116,7 @@ export default function CommentPanel() {
   const threadListRef = useRef<HTMLUListElement>(null)
 
   // Stable refs so the mount-bootstrap effect can call them without deps
-  const refreshFileThreadsRef = useRef<(fid: string) => void>(() => {})
+  const refreshFileThreadsRef = useRef<(fid: string, sha?: string | null) => void>(() => {})
   const refreshDiffThreadsRef = useRef<(ctx: DiffContext) => void>(() => {})
 
   const pending = filePending ?? diffPending ?? imagePending
@@ -151,9 +152,12 @@ export default function CommentPanel() {
 
   // ── File-mode thread loading ──────────────────────────────────────────────
 
-  const refreshFileThreads = useCallback((fid: string) => {
+  const refreshFileThreads = useCallback((fid: string, sha?: string | null) => {
     setFileId(fid)
-    fetch(`/api/files/${fid}/comments`)
+    const url = sha
+      ? `/api/files/${fid}/comments?sha=${encodeURIComponent(sha)}`
+      : `/api/files/${fid}/comments`
+    fetch(url)
       .then((r) => r.json())
       .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
       .catch(() => null)
@@ -174,8 +178,11 @@ export default function CommentPanel() {
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const { fileId: fid } = (e as CustomEvent<{ fileId: string }>).detail
-      if (fid) refreshFileThreads(fid)
+      const { fileId: fid, sha } = (e as CustomEvent<{ fileId: string; sha?: string | null }>).detail
+      if (fid) {
+        setViewerSha(sha ?? null)
+        refreshFileThreads(fid, sha)
+      }
     }
     window.addEventListener('file-opened', handler)
     window.addEventListener('thread-created', handler)
@@ -207,7 +214,8 @@ export default function CommentPanel() {
     const ctx = getPanelContext()
     if (!ctx) return
     if (ctx.type === 'file') {
-      refreshFileThreadsRef.current(ctx.fileId)
+      setViewerSha(ctx.sha ?? null)
+      refreshFileThreadsRef.current(ctx.fileId, ctx.sha)
     } else {
       setDiffCtx(ctx)
       refreshDiffThreadsRef.current(ctx)
@@ -287,7 +295,7 @@ export default function CommentPanel() {
       })
     }
     const fid = thread.fileId ?? p.fileId
-    if (fid) refreshFileThreads(fid)
+    if (fid) refreshFileThreads(fid, viewerSha)
   }
 
   const submitDiffComment = async (p: DiffPendingComposer) => {
@@ -373,7 +381,7 @@ export default function CommentPanel() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resolved: !thread.resolved }),
     })
-    if (fileId) refreshFileThreads(fileId)
+    if (fileId) refreshFileThreads(fileId, viewerSha)
     else if (diffCtx) refreshDiffThreads(diffCtx)
   }
 
@@ -402,7 +410,7 @@ export default function CommentPanel() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: next }),
     })
-    if (fileId) refreshFileThreads(fileId)
+    if (fileId) refreshFileThreads(fileId, viewerSha)
     else if (diffCtx) refreshDiffThreads(diffCtx)
   }
 

@@ -16,6 +16,8 @@ After(async function (this: PlaywrightWorld) {
   await prisma.commentThread.deleteMany({
     where: { sourceId: DEMO_SOURCE_ID, anchor: { selectedText: 'Demo Project' } },
   })
+  // Clean up test-only users created for author-filter scenarios
+  await prisma.user.deleteMany({ where: { email: { endsWith: '@bdd-test.com' } } })
 })
 
 // --- Setup steps ---
@@ -44,6 +46,48 @@ Given('a comment thread exists on {string} anchoring {string}', async function (
         },
       },
     },
+  })
+
+  this.cleanupThreadIds.push(thread.id)
+})
+
+// --- Comment panel assertions ---
+
+Given('a comment thread exists on {string} anchoring {string} with a comment by {string}', async function (
+  this: PlaywrightWorld,
+  filename: string,
+  selectedText: string,
+  authorName: string,
+) {
+  const file = await prisma.fileEntry.upsert({
+    where: { sourceId_path: { sourceId: DEMO_SOURCE_ID, path: filename } },
+    update: {},
+    create: { sourceId: DEMO_SOURCE_ID, path: filename },
+  })
+
+  const author = await prisma.user.upsert({
+    where: { email: `${authorName.toLowerCase()}@bdd-test.com` },
+    update: {},
+    create: { email: `${authorName.toLowerCase()}@bdd-test.com`, name: authorName },
+  })
+
+  const thread = await prisma.commentThread.create({
+    data: {
+      sourceId: DEMO_SOURCE_ID,
+      fileId: file.id,
+      anchor: {
+        create: {
+          type: 'TEXT_SELECTION',
+          filePath: filename,
+          selectedText,
+          prefix: null,
+        },
+      },
+    },
+  })
+
+  await prisma.comment.create({
+    data: { threadId: thread.id, authorId: author.id, body: `Comment by ${authorName}` },
   })
 
   this.cleanupThreadIds.push(thread.id)
@@ -189,6 +233,44 @@ Then('the comment panel shows the thread quoting {string}', async function (
 ) {
   const panel = this.page.locator('[data-testid="comment-panel"]')
   await expect(panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })).toBeVisible({ timeout: 5000 })
+})
+
+When('I filter comments by the author {string}', async function (
+  this: PlaywrightWorld,
+  authorName: string,
+) {
+  const author = await prisma.user.findFirst({ where: { name: authorName } })
+  if (!author) throw new Error(`User "${authorName}" not found in DB`)
+  await this.page.getByTestId('author-filter').selectOption({ value: author.id })
+  await this.page.waitForTimeout(200)
+})
+
+Then('the thread quoting {string} is marked resolved', async function (
+  this: PlaywrightWorld,
+  text: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
+  await expect(thread).toHaveClass(/opacity-60/, { timeout: 5000 })
+})
+
+Then('the thread quoting {string} is not marked resolved', async function (
+  this: PlaywrightWorld,
+  text: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
+  await expect(thread).not.toHaveClass(/opacity-60/, { timeout: 5000 })
+})
+
+Then('the {string} status button on the thread quoting {string} is disabled', async function (
+  this: PlaywrightWorld,
+  label: string,
+  text: string,
+) {
+  const panel = this.page.locator('[data-testid="comment-panel"]')
+  const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })
+  await expect(thread.getByRole('button', { name: label })).toBeDisabled({ timeout: 5000 })
 })
 
 Then('the comment panel shows no threads matching the filter', async function (this: PlaywrightWorld) {

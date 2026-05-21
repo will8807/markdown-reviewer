@@ -18,30 +18,20 @@ images, and diff regions.
 
 ## Prerequisites
 
-- Node 22+
-- pnpm 11+ (`npm i -g pnpm` if not installed)
+- Node 22+ (npm ships with it)
 - Docker Desktop (for the dev Postgres — see `docker-compose.yml` once added in
   Phase 2)
 
 ## Local development
 
 ```bash
-# 1. Install deps
-pnpm install
+# One-shot setup: installs deps, creates .env, generates the Prisma
+# client, applies migrations, and seeds the demo database (wiring the
+# seeded DEV_USER_ID into .env).
+npm run setup
 
-# 2. Copy and edit env
-cp .env.example .env
-# (fill in DEV_USER_ID after the first seed run; see Phase 2)
-
-# 3. Start Postgres
-docker compose up -d db
-
-# 4. Migrate + seed (added in Phase 2)
-pnpm prisma migrate dev
-pnpm db:seed
-
-# 5. Run the dev server
-pnpm dev
+# Run the dev server
+npm run dev
 ```
 
 The app runs on http://localhost:3000.
@@ -49,9 +39,9 @@ The app runs on http://localhost:3000.
 ## Tests
 
 ```bash
-pnpm test         # vitest unit tests
-pnpm test:e2e     # playwright UI specs
-pnpm bdd          # cucumber gherkin scenarios
+npm test            # vitest unit tests
+npm run test:e2e    # playwright UI specs
+npm run bdd         # cucumber gherkin scenarios
 ```
 
 ## Repo conventions

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "setup": "node --experimental-strip-types scripts/setup.ts",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

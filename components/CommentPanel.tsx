@@ -12,10 +12,22 @@ import { getPanelContext } from '@/lib/comments/panelContext'
 
 interface CommentAuthor { id: string; name: string }
 
+function formatCommentDate(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  if (d.toDateString() === now.toDateString()) return `Today · ${time}`
+  const date = d.getFullYear() === now.getFullYear()
+    ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${date} · ${time}`
+}
+
 interface Comment {
   id: string
   body: string
   createdAt: string
+  editedAt: string | null
   author: CommentAuthor
 }
 
@@ -109,6 +121,9 @@ export default function CommentPanel() {
   const [replyThreadId, setReplyThreadId] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState('')
   const [replySubmitting, setReplySubmitting] = useState(false)
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editBody, setEditBody] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [authorFilter, setAuthorFilter] = useState<string>('all')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -403,6 +418,24 @@ export default function CommentPanel() {
     }
   }
 
+  const submitEdit = async (commentId: string) => {
+    if (!editBody.trim() || !devUserId) return
+    setEditSubmitting(true)
+    try {
+      await fetch(`/api/comments/${commentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: editBody.trim(), authorId: devUserId }),
+      })
+      setEditingCommentId(null)
+      setEditBody('')
+      if (fileId) refreshFileThreads(fileId)
+      else if (diffCtx) refreshDiffThreads(diffCtx)
+    } finally {
+      setEditSubmitting(false)
+    }
+  }
+
   const changeStatus = async (thread: Thread, status: ThreadStatus) => {
     const next = thread.status === status ? 'OPEN' : status
     await fetch(`/api/comment-threads/${thread.id}`, {
@@ -599,8 +632,61 @@ export default function CommentPanel() {
                   <ul className="space-y-2">
                     {thread.comments.map((c) => (
                       <li key={c.id}>
-                        <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.author.name}</span>
-                        <p className="text-zinc-600 dark:text-zinc-400 mt-0.5">{c.body}</p>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.author.name}</span>
+                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500" title={c.editedAt ?? c.createdAt}>
+                            {formatCommentDate(c.createdAt)}
+                          </span>
+                          {c.editedAt && (
+                            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 italic" title={c.editedAt}>
+                              edited
+                            </span>
+                          )}
+                          {c.author.id === devUserId && editingCommentId !== c.id && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingCommentId(c.id)
+                                setEditBody(c.body)
+                              }}
+                              className="ml-auto text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
+                        {editingCommentId === c.id ? (
+                          <div className="mt-1 space-y-1">
+                            <textarea
+                              value={editBody}
+                              onChange={(e) => setEditBody(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitEdit(c.id)
+                                if (e.key === 'Escape') { setEditingCommentId(null); setEditBody('') }
+                              }}
+                              rows={2}
+                              className="w-full rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              autoFocus
+                            />
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingCommentId(null); setEditBody('') }}
+                                className="text-xs text-zinc-400 hover:text-zinc-600 px-1"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); submitEdit(c.id) }}
+                                disabled={!editBody.trim() || editSubmitting}
+                                className="rounded bg-blue-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+                              >
+                                {editSubmitting ? 'Saving…' : 'Save'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-zinc-600 dark:text-zinc-400 mt-0.5">{c.body}</p>
+                        )}
                       </li>
                     ))}
                   </ul>

@@ -25,7 +25,7 @@ export default async function Home() {
           <pre className="mt-2 text-xs font-mono">cp .env.example .env && docker-compose up -d</pre>
         </div>
       ) : projects.length === 0 ? (
-        <p className="text-zinc-500">No projects yet. Run <code>pnpm db:seed</code> to create demo data.</p>
+        <p className="text-zinc-500">No projects yet. Run <code>npm run db:seed</code> to create demo data.</p>
       ) : (
         <ul className="space-y-3">
           {projects.map((project) => (

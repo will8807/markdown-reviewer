@@ -23,7 +23,7 @@ preferred-stack rule below.
 - Validation: `zod`
 - Tests: Vitest (unit + component), Playwright (UI), Cucumber
   - Gherkin (`@cucumber/cucumber` with ts-node) for BDD
-- Package manager: pnpm 11
+- Package manager: npm
 
 ## 3. Folder structure
 
@@ -142,12 +142,12 @@ in Phase 3 and the compare view fills it again in Phase 5.
 - **Playwright** — `tests/e2e/`, single browser by default.
 - **Cucumber** — `.feature` files in `features/`, step definitions in
   `features/step_definitions/*.steps.ts` using `@cucumber/cucumber` with
-  `ts-node`. World drives Playwright. Run via `pnpm bdd`.
+  `ts-node`. World drives Playwright. Run via `npm run bdd`.
 
 ## 8. Open questions (resolved)
 
 1. Postgres availability → **Docker Desktop**, dev DB via `docker-compose.yml`.
-2. Package manager → **pnpm** (installed globally via `npm i -g pnpm`).
+2. Package manager → **npm** (migrated from pnpm; npm ships with Node).
 3. BDD runner → **`@cucumber/cucumber`**.
 4. Mock auth → seed one user, store id in `process.env.DEV_USER_ID`, swap the
    resolver behind real auth later without schema change.
@@ -317,3 +317,10 @@ export/reporting, full-text search, advanced permissions, side-by-side
 text-diff layout, anchor re-mapping when a thread's head SHA falls
 behind the current head, image *metadata* surfacing (dimensions, EXIF,
 filesize) in the diff UI. Schema-level placeholders for these remain.
+
+## 12. Backlog (planned, not yet scheduled)
+
+- **Real authentication** — login page with dev-mode credentials
+  (any username + password `"password"`) and a SAML SSO stub behind a
+  provider abstraction. Full implementation plan:
+  [`docs/AUTH_PLAN.md`](./AUTH_PLAN.md).

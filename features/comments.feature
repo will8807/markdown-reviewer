@@ -72,3 +72,57 @@ Feature: Comments
     And I click the "Accept" status button on the thread quoting "Demo Project"
     Then the thread quoting "Demo Project" shows the badge "ACCEPTED"
     And after reloading the page the thread quoting "Demo Project" still shows the badge "ACCEPTED"
+
+  # Regression: the panel must bootstrap from a cold page load, not only after
+  # a tree click. A deep link is the only way to exercise the mount-time race.
+  Scenario: Comments load when a file is opened via a direct link
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I open the viewer for the demo source directly at the file "README.md"
+    Then the comment panel shows the quoted text "Demo Project"
+
+  Scenario: Resolving a thread from the comment panel
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click "Resolve" on the thread quoting "Demo Project"
+    Then the thread quoting "Demo Project" is marked resolved
+
+  Scenario: Reopening a resolved thread
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click "Resolve" on the thread quoting "Demo Project"
+    And I click "Reopen" on the thread quoting "Demo Project"
+    Then the thread quoting "Demo Project" is not marked resolved
+
+  Scenario: Status buttons are disabled once a thread is resolved
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click "Resolve" on the thread quoting "Demo Project"
+    Then the "Accept" status button on the thread quoting "Demo Project" is disabled
+    And the "Reject" status button on the thread quoting "Demo Project" is disabled
+    And the "Discuss" status button on the thread quoting "Demo Project" is disabled
+
+  Scenario: Marking a thread as Rejected
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click the "Reject" status button on the thread quoting "Demo Project"
+    Then the thread quoting "Demo Project" shows the badge "REJECTED"
+
+  Scenario: Marking a thread for discussion
+    Given a comment thread exists on "README.md" anchoring "Demo Project"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I click the "Discuss" status button on the thread quoting "Demo Project"
+    Then the thread quoting "Demo Project" shows the badge "DISCUSS"
+
+  Scenario: Filtering comments by author
+    Given a comment thread exists on "README.md" anchoring "Demo Project" with a comment by "Alice"
+    And a comment thread exists on "README.md" anchoring "Quick Start" with a comment by "Bob"
+    And I am on the viewer for the demo source
+    When I click the file "README.md" in the tree
+    And I filter comments by the author "Alice"
+    Then the comment panel shows the thread quoting "Demo Project"
+    And the comment panel does not show the quoted text "Quick Start"

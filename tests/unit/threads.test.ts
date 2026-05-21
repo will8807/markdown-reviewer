@@ -10,7 +10,7 @@ import {
 } from '@/lib/api/threads'
 
 // Requires DATABASE_URL_TEST pointing at the test schema.
-// Run: docker compose up -d db && pnpm prisma migrate deploy
+// Run: docker compose up -d db && npx prisma migrate deploy
 
 let userId: string
 let sourceId: string

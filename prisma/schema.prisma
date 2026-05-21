@@ -103,12 +103,13 @@ model CommentThread {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   threadId  String
   authorId  String
   body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  editedAt  DateTime?
 
   thread CommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   author User          @relation(fields: [authorId], references: [id])

@@ -10,6 +10,27 @@ Given('the demo project is running at {string}', function (this: PlaywrightWorld
   this.baseUrl = url
 })
 
+Given('I open the viewer for the demo source directly at the file {string}', async function (
+  this: PlaywrightWorld,
+  filename: string,
+) {
+  if (!demoProjectId || !demoSourceId) {
+    const source = await prisma.source.findFirst({
+      where: { type: 'LOCAL' },
+      include: { project: true },
+    })
+    if (!source) throw new Error('No local source found — run npm run db:seed first')
+    demoProjectId = source.projectId
+    demoSourceId = source.id
+  }
+
+  await this.page.goto(
+    `${this.baseUrl}/projects/${demoProjectId}/sources/${demoSourceId}?path=${encodeURIComponent(filename)}`,
+  )
+  await this.page.waitForSelector('[data-testid="main-content"]', { timeout: 15_000 })
+  await this.page.waitForLoadState('networkidle')
+})
+
 Given('I am on the viewer for the demo source', async function (this: PlaywrightWorld) {
   // Discover the seeded project and source from the DB
   if (!demoProjectId || !demoSourceId) {
@@ -17,7 +38,7 @@ Given('I am on the viewer for the demo source', async function (this: Playwright
       where: { type: 'LOCAL' },
       include: { project: true },
     })
-    if (!source) throw new Error('No local source found — run pnpm db:seed first')
+    if (!source) throw new Error('No local source found — run npm run db:seed first')
     demoProjectId = source.projectId
     demoSourceId = source.id
   }

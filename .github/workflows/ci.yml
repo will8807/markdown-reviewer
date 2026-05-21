@@ -11,27 +11,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
+          cache: npm
 
-      - run: pnpm install --frozen-lockfile
+      - run: npm ci
 
       - name: Generate Prisma client
-        run: pnpm exec prisma generate
+        run: npx prisma generate
 
       - name: Apply migrations
-        run: pnpm exec prisma migrate deploy
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: file:./prisma/test.db
 
       - name: Run unit tests
-        run: pnpm test
+        run: npm test
         env:
           DATABASE_URL: file:./prisma/test.db
           DATABASE_URL_TEST: file:./prisma/test.db
@@ -42,44 +38,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
+          cache: npm
 
-      - run: pnpm install --frozen-lockfile
+      - run: npm ci
 
       - name: Generate Prisma client
-        run: pnpm exec prisma generate
+        run: npx prisma generate
 
       - name: Apply migrations
-        run: pnpm exec prisma migrate deploy
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: file:./prisma/bdd.db
 
       - name: Seed database
         id: seed
         run: |
-          OUTPUT=$(DATABASE_URL=file:./prisma/bdd.db pnpm run db:seed 2>&1)
+          OUTPUT=$(DATABASE_URL=file:./prisma/bdd.db npm run db:seed 2>&1)
           echo "$OUTPUT"
           DEV_USER_ID=$(echo "$OUTPUT" | grep 'DEV_USER_ID=' | tail -1 | sed 's/.*DEV_USER_ID=//')
           echo "dev_user_id=$DEV_USER_ID" >> "$GITHUB_OUTPUT"
 
       - name: Install Playwright browsers
-        run: pnpm exec playwright install chromium --with-deps
+        run: npx playwright install chromium --with-deps
 
       - name: Build
-        run: pnpm run build
+        run: npm run build
         env:
           DATABASE_URL: file:./prisma/bdd.db
           DEV_USER_ID: ${{ steps.seed.outputs.dev_user_id }}
 
       - name: Start server
-        run: pnpm start &
+        run: npm start &
         env:
           DATABASE_URL: file:./prisma/bdd.db
           DEV_USER_ID: ${{ steps.seed.outputs.dev_user_id }}
@@ -94,7 +86,7 @@ jobs:
           curl -sf http://localhost:3000 > /dev/null || (echo "Server did not start" && exit 1)
 
       - name: Run BDD tests
-        run: pnpm run bdd:ci
+        run: npm run bdd:ci
         env:
           DATABASE_URL: file:./prisma/bdd.db
           DEV_USER_ID: ${{ steps.seed.outputs.dev_user_id }}

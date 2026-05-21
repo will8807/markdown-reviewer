@@ -66,3 +66,10 @@ Feature: Image diff
   Scenario: Path traversal in a ref-scoped asset request is rejected
     When I request the asset "../../../etc/passwd" from "docs-repo" at ref "main"
     Then the response status is 400
+
+  Scenario: Commenting on a region of a changed image
+    Given I am viewing the image diff for "assets/logo.png" between "main" and "feature/copyedits"
+    When I draw a comment region on the head image
+    And I type "the logo turned yellow" in the comment composer
+    And I submit the comment
+    Then a comment region marker is shown on the head image

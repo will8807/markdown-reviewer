@@ -300,6 +300,27 @@ Then('the response status is {int}', async function (this: PlaywrightWorld, stat
   expect(this.lastApiResponse?.status()).toBe(status)
 })
 
+// ── Image region comments ─────────────────────────────────────────────────────
+
+When('I draw a comment region on the head image', async function (this: PlaywrightWorld) {
+  const headImg = this.page.locator('[data-testid="image-diff"] img[alt="head"]')
+  await headImg.waitFor({ state: 'visible', timeout: 10_000 })
+  const box = await headImg.boundingBox()
+  if (!box) throw new Error('Head image has no bounding box')
+  // Drag from 20% to 60% of the image — well above MIN_SIZE (2%) in both dimensions
+  await this.page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
+  await this.page.mouse.down()
+  await this.page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 10 })
+  await this.page.mouse.up()
+  await this.page.waitForTimeout(300)
+})
+
+Then('a comment region marker is shown on the head image', async function (this: PlaywrightWorld) {
+  await expect(
+    this.page.locator('[data-testid="image-diff"] [data-region="true"]'),
+  ).toBeVisible({ timeout: 10_000 })
+})
+
 // ── Teardown ──────────────────────────────────────────────────────────────────
 
 After(async function (this: PlaywrightWorld) {

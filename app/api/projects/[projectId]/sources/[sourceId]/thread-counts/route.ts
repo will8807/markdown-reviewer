@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ projectId: string; sourceId: string }> },
 ) {
   const { projectId, sourceId } = await params
@@ -10,8 +10,16 @@ export async function GET(
   const source = await prisma.source.findFirst({ where: { id: sourceId, projectId } })
   if (!source) return Response.json({ error: 'Not found' }, { status: 404 })
 
+  // Optional: scope to a specific diff by baseSha+headSha
+  const base = req.nextUrl.searchParams.get('base')
+  const head = req.nextUrl.searchParams.get('head')
+  const hunkId = base && head ? `${base}:${head}` : undefined
+
   const threads = await prisma.commentThread.findMany({
-    where: { sourceId },
+    where: {
+      sourceId,
+      ...(hunkId ? { anchor: { hunkId } } : {}),
+    },
     select: { resolved: true, anchor: { select: { filePath: true } } },
   })
 

@@ -1,6 +1,12 @@
 'use client'
 
+import { useCallback, useEffect, useState } from 'react'
 import type { ChangedFile } from '@/lib/diff/computeDiff'
+
+interface ThreadCounts {
+  open: number
+  resolved: number
+}
 
 const STATUS_LABEL: Record<ChangedFile['status'], string> = {
   added: 'A',
@@ -26,6 +32,32 @@ function isImage(filePath: string) {
 function assetUrl(projectId: string, sourceId: string, filePath: string, sha: string) {
   const p = new URLSearchParams({ path: filePath, ref: sha })
   return `/api/projects/${projectId}/sources/${sourceId}/assets?${p}`
+}
+
+// ── Comment badges ───────────────────────────────────────────────────────────
+
+function CommentBadge({ counts }: { counts: ThreadCounts | undefined }) {
+  if (!counts || (counts.open === 0 && counts.resolved === 0)) return null
+  return (
+    <span className="flex items-center gap-1 shrink-0">
+      {counts.open > 0 && (
+        <span
+          title={`${counts.open} open comment${counts.open === 1 ? '' : 's'}`}
+          className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+        >
+          {counts.open}
+        </span>
+      )}
+      {counts.resolved > 0 && (
+        <span
+          title={`${counts.resolved} resolved`}
+          className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+        >
+          ✓{counts.resolved}
+        </span>
+      )}
+    </span>
+  )
 }
 
 // ── Tree construction ────────────────────────────────────────────────────────
@@ -96,6 +128,7 @@ function DiffTreeNodes({
   baseSha,
   headSha,
   depth,
+  threadCounts,
 }: {
   nodes: DiffTreeNode[]
   activePath: string | null
@@ -105,6 +138,7 @@ function DiffTreeNodes({
   baseSha?: string | null
   headSha?: string | null
   depth: number
+  threadCounts: Record<string, ThreadCounts>
 }) {
   return (
     <ul>
@@ -127,6 +161,7 @@ function DiffTreeNodes({
                 baseSha={baseSha}
                 headSha={headSha}
                 depth={depth + 1}
+                threadCounts={threadCounts}
               />
             </li>
           )
@@ -173,6 +208,7 @@ function DiffTreeNodes({
               <span className="flex-1 truncate font-mono text-zinc-700 dark:text-zinc-300">
                 {node.name}
               </span>
+              <CommentBadge counts={threadCounts[file.path]} />
               <span className="shrink-0 text-zinc-400 tabular-nums">
                 {file.additions > 0 && (
                   <span className="text-green-600 dark:text-green-400">+{file.additions}</span>
@@ -199,6 +235,28 @@ export default function DiffFileList({
   baseSha,
   headSha,
 }: Props) {
+  const [threadCounts, setThreadCounts] = useState<Record<string, ThreadCounts>>({})
+
+  const fetchCounts = useCallback(() => {
+    if (!projectId || !sourceId || !baseSha || !headSha) return
+    const p = new URLSearchParams({ base: baseSha, head: headSha })
+    fetch(`/api/projects/${projectId}/sources/${sourceId}/thread-counts?${p}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { counts?: Record<string, ThreadCounts> } | null) => {
+        if (data?.counts) setThreadCounts(data.counts)
+      })
+      .catch(() => {})
+  }, [projectId, sourceId, baseSha, headSha])
+
+  useEffect(() => { fetchCounts() }, [fetchCounts])
+
+  // Refresh when threads are added or changed
+  useEffect(() => {
+    const handler = () => fetchCounts()
+    window.addEventListener('threads-updated', handler)
+    return () => window.removeEventListener('threads-updated', handler)
+  }, [fetchCounts])
+
   if (files.length === 0) {
     return <p className="p-4 text-sm text-zinc-400">No changed files.</p>
   }
@@ -216,6 +274,7 @@ export default function DiffFileList({
         baseSha={baseSha}
         headSha={headSha}
         depth={0}
+        threadCounts={threadCounts}
       />
     </div>
   )

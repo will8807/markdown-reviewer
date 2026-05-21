@@ -19,18 +19,18 @@ export async function GET(
     return Response.json({ error: 'Missing path query parameter' }, { status: 400 })
   }
 
+  // Validate path safety before any DB or filesystem access so a traversal
+  // attempt always returns 400 regardless of whether the source exists.
+  try {
+    assertSafe('/root', parsed.data.path)
+  } catch {
+    return Response.json({ error: 'Forbidden' }, { status: 400 })
+  }
+
   const source = await prisma.source.findFirst({ where: { id: sourceId, projectId } })
   if (!source) return Response.json({ error: 'Not found' }, { status: 404 })
 
   if (source.type === 'GIT') {
-    // Path-safety check first — never touch the filesystem with a traversal path,
-    // and never let unrelated errors (e.g. uncloned repo) swallow a 400.
-    try {
-      assertSafe('/git-root', parsed.data.path)
-    } catch {
-      return Response.json({ error: 'Forbidden' }, { status: 400 })
-    }
-
     const ref = req.nextUrl.searchParams.get('ref') ?? 'HEAD'
     const repoDir = getRepoDir(source.id)
     try {
@@ -51,7 +51,7 @@ export async function GET(
     return Response.json({ path: parsed.data.path, content })
   } catch (err: unknown) {
     if (err instanceof Error && /path traversal/i.test(err.message)) {
-      return Response.json({ error: 'Forbidden' }, { status: 403 })
+      return Response.json({ error: 'Forbidden' }, { status: 400 })
     }
     return Response.json({ error: 'Not found' }, { status: 404 })
   }

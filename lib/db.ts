@@ -16,8 +16,9 @@ function createPrismaClient() {
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
     transactionOptions: { maxWait: 15_000, timeout: 30_000 },
   })
-  // busy_timeout must be set per-connection; apply it to the adapter's connection.
-  client.$executeRawUnsafe('PRAGMA busy_timeout=10000').catch(() => {})
+  // busy_timeout must be set per-connection. 30 s gives ample headroom under CI
+  // load where the server can hold the write lock for several seconds.
+  client.$executeRawUnsafe('PRAGMA busy_timeout=30000').catch(() => {})
   return client
 }
 

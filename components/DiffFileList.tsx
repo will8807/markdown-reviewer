@@ -28,6 +28,44 @@ function assetUrl(projectId: string, sourceId: string, filePath: string, sha: st
   return `/api/projects/${projectId}/sources/${sourceId}/assets?${p}`
 }
 
+// ── Tree construction ────────────────────────────────────────────────────────
+
+interface DiffTreeNode {
+  name: string
+  path: string
+  children?: DiffTreeNode[]
+  file?: ChangedFile
+}
+
+function buildDiffTree(files: ChangedFile[]): DiffTreeNode[] {
+  const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path))
+  const root: DiffTreeNode[] = []
+
+  for (const file of sorted) {
+    const parts = file.path.split('/')
+    let nodes = root
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      const fullPath = parts.slice(0, i + 1).join('/')
+      const isLeaf = i === parts.length - 1
+
+      let node = nodes.find((n) => n.name === part)
+      if (!node) {
+        node = isLeaf
+          ? { name: part, path: fullPath, file }
+          : { name: part, path: fullPath, children: [] }
+        nodes.push(node)
+      }
+      if (!isLeaf) nodes = node.children!
+    }
+  }
+
+  return root
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+
 interface Props {
   files: ChangedFile[]
   activePath: string | null
@@ -49,24 +87,53 @@ function Thumbnail({ src, alt }: { src: string; alt: string }) {
   )
 }
 
-export default function DiffFileList({
-  files,
+function DiffTreeNodes({
+  nodes,
   activePath,
   onSelect,
   projectId,
   sourceId,
   baseSha,
   headSha,
-}: Props) {
-  if (files.length === 0) {
-    return <p className="p-4 text-sm text-zinc-400">No changed files.</p>
-  }
-
-  const canShowThumbs = !!(projectId && sourceId)
-
+  depth,
+}: {
+  nodes: DiffTreeNode[]
+  activePath: string | null
+  onSelect: (path: string) => void
+  projectId?: string
+  sourceId?: string
+  baseSha?: string | null
+  headSha?: string | null
+  depth: number
+}) {
   return (
-    <ul className="py-1" data-testid="diff-file-list">
-      {files.map((file) => {
+    <ul>
+      {nodes.map((node) => {
+        if (node.children) {
+          return (
+            <li key={node.path}>
+              <span
+                className="block py-0.5 text-xs font-semibold uppercase tracking-wide text-zinc-400 select-none"
+                style={{ paddingLeft: `${depth * 12 + 12}px` }}
+              >
+                {node.name}
+              </span>
+              <DiffTreeNodes
+                nodes={node.children}
+                activePath={activePath}
+                onSelect={onSelect}
+                projectId={projectId}
+                sourceId={sourceId}
+                baseSha={baseSha}
+                headSha={headSha}
+                depth={depth + 1}
+              />
+            </li>
+          )
+        }
+
+        const file = node.file!
+        const canShowThumbs = !!(projectId && sourceId)
         const showThumb = canShowThumbs && isImage(file.path)
         const baseThumbUrl =
           showThumb && baseSha && file.status !== 'added'
@@ -84,7 +151,8 @@ export default function DiffFileList({
               data-testid="diff-file-item"
               data-path={file.path}
               data-status={file.status}
-              className={`w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+              style={{ paddingLeft: `${depth * 12 + 12}px` }}
+              className={`w-full text-left flex items-center gap-2 pr-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
                 activePath === file.path ? 'bg-blue-50 dark:bg-blue-900/30' : ''
               }`}
             >
@@ -103,7 +171,7 @@ export default function DiffFileList({
               ) : null}
 
               <span className="flex-1 truncate font-mono text-zinc-700 dark:text-zinc-300">
-                {file.path}
+                {node.name}
               </span>
               <span className="shrink-0 text-zinc-400 tabular-nums">
                 {file.additions > 0 && (
@@ -119,5 +187,36 @@ export default function DiffFileList({
         )
       })}
     </ul>
+  )
+}
+
+export default function DiffFileList({
+  files,
+  activePath,
+  onSelect,
+  projectId,
+  sourceId,
+  baseSha,
+  headSha,
+}: Props) {
+  if (files.length === 0) {
+    return <p className="p-4 text-sm text-zinc-400">No changed files.</p>
+  }
+
+  const tree = buildDiffTree(files)
+
+  return (
+    <div className="py-1" data-testid="diff-file-list">
+      <DiffTreeNodes
+        nodes={tree}
+        activePath={activePath}
+        onSelect={onSelect}
+        projectId={projectId}
+        sourceId={sourceId}
+        baseSha={baseSha}
+        headSha={headSha}
+        depth={0}
+      />
+    </div>
   )
 }

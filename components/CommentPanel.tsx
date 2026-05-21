@@ -27,6 +27,10 @@ interface Anchor {
   diffSide: string | null
   lineStart: number | null
   lineEnd: number | null
+  imgX: number | null
+  imgY: number | null
+  imgW: number | null
+  imgH: number | null
 }
 
 interface Thread {
@@ -56,6 +60,19 @@ interface DiffPendingComposer {
   headSha: string
 }
 
+// Image-region comment request (IMAGE_REGION)
+interface ImageRegionPendingComposer {
+  sourceId: string
+  filePath: string
+  diffSide: 'base' | 'head'
+  imgX: number
+  imgY: number
+  imgW: number
+  imgH: number
+  baseSha: string
+  headSha: string
+}
+
 interface DiffContext {
   sourceId: string
   filePath: string
@@ -77,6 +94,7 @@ export default function CommentPanel() {
 
   const [filePending, setFilePending] = useState<FilePendingComposer | null>(null)
   const [diffPending, setDiffPending] = useState<DiffPendingComposer | null>(null)
+  const [imagePending, setImagePending] = useState<ImageRegionPendingComposer | null>(null)
 
   const [body, setBody] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -84,7 +102,7 @@ export default function CommentPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const threadListRef = useRef<HTMLUListElement>(null)
 
-  const pending = filePending ?? diffPending
+  const pending = filePending ?? diffPending ?? imagePending
 
   useEffect(() => {
     fetch('/api/me')
@@ -170,6 +188,7 @@ export default function CommentPanel() {
       setDiffCtx(ctx)
       setFilePending(null)
       setDiffPending(null)
+      setImagePending(null)
       setBody('')
       setFileId(null)
       refreshDiffThreads(ctx)
@@ -183,11 +202,25 @@ export default function CommentPanel() {
       const detail = (e as CustomEvent<DiffPendingComposer>).detail
       setDiffPending(detail)
       setFilePending(null)
+      setImagePending(null)
       setBody('')
       setTimeout(() => textareaRef.current?.focus(), 50)
     }
     window.addEventListener('diff-comment-requested', handler)
     return () => window.removeEventListener('diff-comment-requested', handler)
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<ImageRegionPendingComposer>).detail
+      setImagePending(detail)
+      setFilePending(null)
+      setDiffPending(null)
+      setBody('')
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    }
+    window.addEventListener('image-region-comment-requested', handler)
+    return () => window.removeEventListener('image-region-comment-requested', handler)
   }, [])
 
   // ── Submission ────────────────────────────────────────────────────────────
@@ -255,16 +288,49 @@ export default function CommentPanel() {
     if (diffCtx) refreshDiffThreads(diffCtx)
   }
 
+  const submitImageRegionComment = async (p: ImageRegionPendingComposer) => {
+    const threadRes = await fetch('/api/comment-threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceId: p.sourceId,
+        anchor: {
+          type: 'IMAGE_REGION',
+          filePath: p.filePath,
+          diffSide: p.diffSide,
+          imgX: p.imgX,
+          imgY: p.imgY,
+          imgW: p.imgW,
+          imgH: p.imgH,
+          baseSha: p.baseSha,
+          headSha: p.headSha,
+        },
+      }),
+    })
+    if (!threadRes.ok) return
+    const thread = (await threadRes.json()) as { id: string }
+    if (devUserId) {
+      await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId: thread.id, authorId: devUserId, body: body.trim() }),
+      })
+    }
+    if (diffCtx) refreshDiffThreads(diffCtx)
+  }
+
   const submitComment = async () => {
     if (!body.trim()) return
     setSubmitting(true)
     try {
       if (diffPending) await submitDiffComment(diffPending)
+      else if (imagePending) await submitImageRegionComment(imagePending)
       else if (filePending) await submitFileComment(filePending)
     } finally {
       setSubmitting(false)
       setFilePending(null)
       setDiffPending(null)
+      setImagePending(null)
       setBody('')
     }
   }
@@ -295,106 +361,115 @@ export default function CommentPanel() {
   // Quote shown in the pending composer
   const composerQuote = diffPending
     ? diffPending.selectedText || `${diffPending.diffSide} · lines ${diffPending.lineStart}–${diffPending.lineEnd}`
+    : imagePending
+    ? `Region on ${imagePending.diffSide}`
     : filePending?.anchor.selectedText ?? null
 
   return (
-    <div data-testid="comment-panel" className="p-4 space-y-4">
-      <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide">Comments</h2>
+    <div data-testid="comment-panel" className="flex flex-col h-full">
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide">Comments</h2>
 
-      {/* Composer */}
-      {pending && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950 p-3 space-y-2">
-          {composerQuote && (
-            <blockquote className="border-l-2 border-blue-300 pl-2 text-xs text-blue-600 dark:text-blue-400 italic truncate">
-              {composerQuote}
-            </blockquote>
-          )}
-          <textarea
-            ref={textareaRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitComment()
-              if (e.key === 'Escape') {
-                setFilePending(null)
-                setDiffPending(null)
-                setBody('')
-              }
-            }}
-            placeholder="Add a comment…"
-            rows={3}
-            className="w-full rounded border border-blue-200 dark:border-blue-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={() => { setFilePending(null); setDiffPending(null); setBody('') }}
-              className="text-xs text-zinc-500 hover:text-zinc-700 px-2 py-1"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={submitComment}
-              disabled={!body.trim() || submitting}
-              className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
-            >
-              {submitting ? 'Saving…' : 'Comment'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Thread list */}
-      {threads.length === 0 && !pending ? (
-        <p className="text-sm text-zinc-400 italic">
-          {isDiffMode ? 'Click a highlighted block to add a comment.' : 'Select text to add a comment.'}
-        </p>
-      ) : (
-        <ul ref={threadListRef} className="space-y-3">
-          {threads.map((thread) => {
-            const isDiffThread = thread.anchor?.type === 'DIFF_HUNK'
-            const quote = thread.anchor?.selectedText
-              ?? (isDiffThread && thread.anchor?.lineStart
-                ? `${thread.anchor.diffSide} · lines ${thread.anchor.lineStart}–${thread.anchor.lineEnd ?? thread.anchor.lineStart}`
-                : null)
-
-            return (
-              <li
-                key={thread.id}
-                data-testid="comment-thread"
-                data-thread-id={thread.id}
-                onClick={() => setActiveThreadId((id) => (id === thread.id ? null : thread.id))}
-                className={`rounded-lg border p-3 text-sm cursor-pointer ${
-                  thread.resolved
-                    ? 'border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 opacity-60'
-                    : activeThreadId === thread.id
-                    ? 'border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/30'
-                    : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
-                }`}
+        {/* Composer */}
+        {pending && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950 p-3 space-y-2">
+            {composerQuote && (
+              <blockquote className="border-l-2 border-blue-300 pl-2 text-xs text-blue-600 dark:text-blue-400 italic truncate">
+                {composerQuote}
+              </blockquote>
+            )}
+            <textarea
+              ref={textareaRef}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitComment()
+                if (e.key === 'Escape') {
+                  setFilePending(null)
+                  setDiffPending(null)
+                  setImagePending(null)
+                  setBody('')
+                }
+              }}
+              placeholder="Add a comment…"
+              rows={3}
+              className="w-full rounded border border-blue-200 dark:border-blue-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setFilePending(null); setDiffPending(null); setImagePending(null); setBody('') }}
+                className="text-xs text-zinc-500 hover:text-zinc-700 px-2 py-1"
               >
-                {quote && (
-                  <blockquote className="mb-2 border-l-2 border-zinc-300 pl-2 text-xs text-zinc-500 italic truncate">
-                    {quote}
-                  </blockquote>
-                )}
-                <ul className="space-y-2">
-                  {thread.comments.map((c) => (
-                    <li key={c.id}>
-                      <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.author.name}</span>
-                      <p className="text-zinc-600 dark:text-zinc-400 mt-0.5">{c.body}</p>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggleResolved(thread) }}
-                  className="mt-2 text-xs text-zinc-400 hover:text-zinc-600 underline"
+                Cancel
+              </button>
+              <button
+                onClick={submitComment}
+                disabled={!body.trim() || submitting}
+                className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+              >
+                {submitting ? 'Saving…' : 'Comment'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Thread list */}
+        {threads.length === 0 && !pending ? (
+          <p className="text-sm text-zinc-400 italic">
+            {isDiffMode ? 'Highlight text in the diff, then click Add Comment.' : 'Select text to add a comment.'}
+          </p>
+        ) : (
+          <ul ref={threadListRef} className="space-y-3">
+            {threads.map((thread) => {
+              const anchorType = thread.anchor?.type
+              const quote = anchorType === 'IMAGE_REGION'
+                ? `Region on ${thread.anchor?.diffSide}`
+                : thread.anchor?.selectedText
+                  ?? (anchorType === 'DIFF_HUNK' && thread.anchor?.lineStart
+                    ? `${thread.anchor.diffSide} · lines ${thread.anchor.lineStart}–${thread.anchor.lineEnd ?? thread.anchor.lineStart}`
+                    : null)
+
+              return (
+                <li
+                  key={thread.id}
+                  data-testid="comment-thread"
+                  data-thread-id={thread.id}
+                  onClick={() => setActiveThreadId((id) => (id === thread.id ? null : thread.id))}
+                  className={`rounded-lg border p-3 text-sm cursor-pointer ${
+                    thread.resolved
+                      ? 'border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 opacity-60'
+                      : activeThreadId === thread.id
+                      ? 'border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/30'
+                      : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
+                  }`}
                 >
-                  {thread.resolved ? 'Reopen' : 'Resolve'}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+                  {quote && (
+                    <blockquote className="mb-2 border-l-2 border-zinc-300 pl-2 text-xs text-zinc-500 italic truncate">
+                      {quote}
+                    </blockquote>
+                  )}
+                  <ul className="space-y-2">
+                    {thread.comments.map((c) => (
+                      <li key={c.id}>
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.author.name}</span>
+                        <p className="text-zinc-600 dark:text-zinc-400 mt-0.5">{c.body}</p>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleResolved(thread) }}
+                    className="mt-2 text-xs text-zinc-400 hover:text-zinc-600 underline"
+                  >
+                    {thread.resolved ? 'Reopen' : 'Resolve'}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
     </div>
   )
 }

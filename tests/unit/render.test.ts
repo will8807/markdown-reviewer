@@ -71,4 +71,14 @@ describe('renderMarkdown', () => {
     // rehype-sanitize applies clobberPrefix "user-content-" to all ids
     expect(html).toContain('id="user-content-my-section"')
   })
+
+  it('preserves data-source-start on code blocks across shiki transform', async () => {
+    // Shiki replaces the <pre> node entirely (parent.children[index] = fragment),
+    // so without the bridge plugin the diff viewer can't highlight code blocks.
+    const md = '# Title\n\n```ts\nconst x = 1\n```\n'
+    const html = await renderMarkdown(md, { ...opts, includeSourceLines: true })
+    expect(html).toContain('<pre')
+    // The code block starts on line 3 (after "# Title" + blank line)
+    expect(html).toMatch(/<pre[^>]*data-source-start="3"/)
+  })
 })

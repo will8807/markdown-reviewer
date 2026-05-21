@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { getRepoDir } from '@/lib/sources/gitRevisions'
-import { resolveRef, readFile } from '@/lib/sources/gitSource'
+import { resolveRef, readFile, listRefs } from '@/lib/sources/gitSource'
 import { listChangedFiles, computeFileDiff } from '@/lib/diff/computeDiff'
 import { renderMarkdown } from '@/lib/markdown/render'
 import CompareClient from '@/components/CompareClient'
@@ -30,6 +30,16 @@ export default async function ComparePage({
   })
   if (!source) notFound()
 
+  const repoDir = getRepoDir(source.id)
+
+  // Clone/fetch and list refs server-side so dropdowns are pre-populated on
+  // the first render — no client-side round-trip needed.
+  if (source.gitUrl) {
+    const { cloneOrFetch } = await import('@/lib/sources/gitSource')
+    try { await cloneOrFetch(source.gitUrl, repoDir) } catch { /* non-fatal */ }
+  }
+  const refs = await listRefs(repoDir).catch(() => [])
+
   if (!base || !head) {
     return (
       <CompareClient
@@ -38,21 +48,16 @@ export default async function ComparePage({
         files={[]}
         baseSha={null}
         headSha={null}
-        base={null}
-        head={null}
+        base={base ?? null}
+        head={head ?? null}
         activePath={null}
         activeFileDiff={null}
+        refs={refs}
       />
     )
   }
 
-  const repoDir = getRepoDir(source.id)
-
-  // Clone (or fetch) on demand so the compare page works on first load.
-  if (source.gitUrl) {
-    const { cloneOrFetch } = await import('@/lib/sources/gitSource')
-    try { await cloneOrFetch(source.gitUrl, repoDir) } catch { /* fetch errors are non-fatal */ }
-  }
+  // cloneOrFetch already done above
 
   let baseSha: string
   let headSha: string
@@ -77,19 +82,21 @@ export default async function ComparePage({
       let headHtml: string | null = null
 
       if (!diff.isBinary) {
-        const renderOpts = { projectId, sourceId, filePath: activePath, includeSourceLines: true }
-
         if (diff.status !== 'added') {
           try {
             const buf = await readFile(repoDir, baseSha, activePath)
-            baseHtml = await renderMarkdown(buf.toString('utf8'), renderOpts)
+            baseHtml = await renderMarkdown(buf.toString('utf8'), {
+              projectId, sourceId, filePath: activePath, includeSourceLines: true, ref: baseSha,
+            })
           } catch { /* file may not exist on base */ }
         }
 
         if (diff.status !== 'removed') {
           try {
             const buf = await readFile(repoDir, headSha, activePath)
-            headHtml = await renderMarkdown(buf.toString('utf8'), renderOpts)
+            headHtml = await renderMarkdown(buf.toString('utf8'), {
+              projectId, sourceId, filePath: activePath, includeSourceLines: true, ref: headSha,
+            })
           } catch { /* file may not exist on head */ }
         }
       }
@@ -115,6 +122,7 @@ export default async function ComparePage({
       head={head}
       activePath={activePath ?? null}
       activeFileDiff={activeFileDiff}
+      refs={refs}
     />
   )
 }

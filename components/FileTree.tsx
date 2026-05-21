@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 interface TreeNode {
@@ -102,7 +102,6 @@ function RefPicker({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const pathname = usePathname()
   const [refs, setRefs] = useState<RefInfo[]>([])
 
   useEffect(() => {
@@ -115,8 +114,6 @@ function RefPicker({
   if (refs.length === 0) return null
 
   const value = currentRef ?? refs[0]?.name ?? ''
-  const isCompare = pathname?.includes('/compare')
-
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const params = new URLSearchParams(searchParams?.toString() ?? '')
     params.set('ref', e.target.value)
@@ -125,34 +122,18 @@ function RefPicker({
 
   return (
     <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-700 space-y-1.5">
-      {!isCompare && (
-        <select
-          data-testid="ref-select"
-          value={value}
-          onChange={handleChange}
-          className="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          {refs.map((r) => (
-            <option key={r.name} value={r.name}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-      )}
-      <div className="flex gap-2 text-xs">
-        <Link
-          href={`/projects/${projectId}/sources/${sourceId}${currentRef ? `?ref=${encodeURIComponent(currentRef)}` : ''}`}
-          className={`flex-1 text-center rounded py-0.5 ${!isCompare ? 'bg-zinc-100 dark:bg-zinc-800 font-medium' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
-        >
-          View
-        </Link>
-        <Link
-          href={`/projects/${projectId}/sources/${sourceId}/compare`}
-          className={`flex-1 text-center rounded py-0.5 ${isCompare ? 'bg-zinc-100 dark:bg-zinc-800 font-medium' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
-        >
-          Compare
-        </Link>
-      </div>
+      <select
+        data-testid="ref-select"
+        value={value}
+        onChange={handleChange}
+        className="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+      >
+        {refs.map((r) => (
+          <option key={r.name} value={r.name}>
+            {r.name}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

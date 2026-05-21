@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DiffFileList from './DiffFileList'
+import ViewerCompareToggle from './ViewerCompareToggle'
 import RenderedDiff from './RenderedDiff'
 import ImageDiff from './ImageDiff'
+import AddCommentButton from './AddCommentButton'
 import type { ChangedFile, DiffHunk } from '@/lib/diff/computeDiff'
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
@@ -37,6 +39,7 @@ interface Props {
   head: string | null
   activePath: string | null
   activeFileDiff: ActiveFileDiff | null
+  refs: RefInfo[]
 }
 
 export default function CompareClient({
@@ -49,17 +52,11 @@ export default function CompareClient({
   head,
   activePath,
   activeFileDiff,
+  refs,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [refs, setRefs] = useState<RefInfo[]>([])
-
-  useEffect(() => {
-    fetch(`/api/projects/${projectId}/sources/${sourceId}/refs`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setRefs(data?.refs ?? []))
-      .catch(() => {})
-  }, [projectId, sourceId])
+  const [leftOpen, setLeftOpen] = useState(true)
 
   const navigate = useCallback(
     (overrides: Record<string, string | null>) => {
@@ -81,10 +78,13 @@ export default function CompareClient({
     </option>
   ))
 
+  const showDiffToolbar = !!(activePath && activeFileDiff && baseSha && headSha && !isImagePath(activePath) && !activeFileDiff.isBinary)
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left: ref pickers + changed-files list */}
-      <div className="w-72 shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden">
+      <div className={`shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden transition-[width] duration-200 ${leftOpen ? 'w-72' : 'w-0'}`}>
+        <ViewerCompareToggle />
         <div className="p-3 border-b border-zinc-200 dark:border-zinc-700 space-y-2">
           <div className="flex items-center gap-2">
             <label className="text-xs text-zinc-500 w-8 shrink-0">base</label>
@@ -125,7 +125,23 @@ export default function CompareClient({
         </div>
       </div>
 
-      {/* Right: rendered diff or empty state */}
+      {/* Left panel toggle tab — sits at the seam, always visible */}
+      <button
+        onClick={() => setLeftOpen((o) => !o)}
+        className="self-center h-12 w-4 shrink-0 rounded-r flex items-center justify-center bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-500 dark:text-zinc-400"
+        title={leftOpen ? 'Collapse file list' : 'Expand file list'}
+        aria-label={leftOpen ? 'Collapse file list' : 'Expand file list'}
+      >
+        <span className="text-[10px] leading-none">{leftOpen ? '‹' : '›'}</span>
+      </button>
+
+      {/* Right: Add Comment toolbar (when active) + rendered diff */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      {showDiffToolbar && (
+        <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1">
+          <AddCommentButton />
+        </div>
+      )}
       <div className="flex-1 overflow-hidden" data-testid="diff-view">
         {activePath && activeFileDiff && baseSha && headSha ? (
           isImagePath(activePath) ? (
@@ -136,6 +152,8 @@ export default function CompareClient({
               baseSha={baseSha}
               headSha={headSha}
               status={activeFileDiff.status}
+              onBack={searchParams?.get('from') ? () => navigate({ path: searchParams!.get('from')!, from: null }) : undefined}
+              backLabel={searchParams?.get('from')?.split('/').pop()}
             />
           ) : activeFileDiff.isBinary ? (
             <div className="p-8 text-sm text-zinc-500">
@@ -153,6 +171,7 @@ export default function CompareClient({
               headHtml={activeFileDiff.headHtml}
               hunks={activeFileDiff.hunks}
               status={activeFileDiff.status}
+              onImageClick={(imgPath) => navigate({ path: imgPath, from: activePath })}
             />
           )
         ) : (
@@ -162,6 +181,7 @@ export default function CompareClient({
               : 'Choose a base and head ref to compare.'}
           </div>
         )}
+      </div>
       </div>
     </div>
   )

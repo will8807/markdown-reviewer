@@ -6,6 +6,7 @@ interface Options {
   projectId: string
   sourceId: string
   filePath: string
+  ref?: string
 }
 
 function resolveRelative(from: string, rel: string): string {
@@ -14,7 +15,7 @@ function resolveRelative(from: string, rel: string): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const rehypeLinkResolver: Plugin<[Options], any> = (options) => {
-  const { projectId, sourceId, filePath } = options
+  const { projectId, sourceId, filePath, ref } = options
   const viewerBase = `/projects/${projectId}/sources/${sourceId}`
   const assetsBase = `/api/projects/${projectId}/sources/${sourceId}/assets`
 
@@ -40,9 +41,12 @@ export const rehypeLinkResolver: Plugin<[Options], any> = (options) => {
         const src = node.properties?.src
         if (typeof src === 'string' && !src.startsWith('http') && !src.startsWith('data:')) {
           const resolved = resolveRelative(filePath, src)
+          const refSuffix = ref ? `&ref=${encodeURIComponent(ref)}` : ''
           node.properties = {
             ...node.properties,
-            src: `${assetsBase}?path=${encodeURIComponent(resolved)}`,
+            src: `${assetsBase}?path=${encodeURIComponent(resolved)}${refSuffix}`,
+            // In diff mode, tag the image so the diff viewer can navigate to its own diff
+            ...(ref ? { dataComparePath: resolved } : {}),
           }
         }
       }

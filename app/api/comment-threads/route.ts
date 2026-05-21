@@ -19,6 +19,11 @@ const baseAnchorSchema = z.object({
   lineEnd: z.number().int().positive().optional(),
   baseSha: z.string().optional(),
   headSha: z.string().optional(),
+  // IMAGE_REGION fields (normalized 0..1 relative to image element bounding box)
+  imgX: z.number().min(0).max(1).optional(),
+  imgY: z.number().min(0).max(1).optional(),
+  imgW: z.number().min(0).max(1).optional(),
+  imgH: z.number().min(0).max(1).optional(),
 })
 
 const bodySchema = z.object({
@@ -63,6 +68,10 @@ export async function POST(req: Request) {
     hunkId: anchor.baseSha && anchor.headSha
       ? `${anchor.baseSha}:${anchor.headSha}`
       : undefined,
+    imgX: anchor.imgX,
+    imgY: anchor.imgY,
+    imgW: anchor.imgW,
+    imgH: anchor.imgH,
   }
 
   const thread = await createCommentThread(sourceId, fileId ?? null, anchorData)

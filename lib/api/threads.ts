@@ -63,7 +63,6 @@ export async function listThreadsForDiff(
     where: {
       sourceId,
       anchor: {
-        type: 'DIFF_HUNK',
         filePath,
         hunkId: `${baseSha}:${headSha}`,
       },

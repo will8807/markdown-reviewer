@@ -16,7 +16,12 @@ export interface Ref {
 // loser polls for HEAD to appear instead of erroring.
 export async function cloneOrFetch(sourceUrl: string, repoDir: string): Promise<void> {
   if (existsSync(join(repoDir, 'HEAD'))) {
-    await simpleGit(repoDir).fetch(['--all', '--prune'])
+    await simpleGit(repoDir).fetch([
+      'origin',
+      '+refs/heads/*:refs/heads/*',
+      '+refs/tags/*:refs/tags/*',
+      '--prune',
+    ])
     return
   }
   try {

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import MarkdownViewer from './MarkdownViewer'
 import SelectionPopover from './SelectionPopover'
 import type { serializeSelection } from '@/lib/anchors/textAnchor'
+import { setPanelContext } from '@/lib/comments/panelContext'
 
 interface Props {
   html: string
@@ -18,6 +19,7 @@ export default function ViewerClient({ html, sourceContent, filePath, fileId }: 
 
   useEffect(() => {
     if (!fileId) return
+    setPanelContext({ type: 'file', fileId })
     window.dispatchEvent(new CustomEvent('file-opened', { detail: { fileId } }))
   }, [fileId])
 

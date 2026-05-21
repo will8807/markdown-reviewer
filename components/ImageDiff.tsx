@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import ImageRegionOverlay from './ImageRegionOverlay'
+import { setPanelContext } from '@/lib/comments/panelContext'
 
 type Mode = 'side-by-side' | 'slider' | 'onion-skin' | 'pixel-diff'
 
@@ -85,10 +86,12 @@ export default function ImageDiff({ projectId, sourceId, filePath, baseSha, head
 
   // Notify CommentPanel so it loads threads for this image file.
   useEffect(() => {
-    const fire = () =>
+    const fire = () => {
+      setPanelContext({ type: 'diff', sourceId, filePath, baseSha, headSha })
       window.dispatchEvent(
         new CustomEvent('diff-opened', { detail: { sourceId, filePath, baseSha, headSha } }),
       )
+    }
     const t1 = setTimeout(fire, 0)
     const t2 = setTimeout(fire, 150)
     const t3 = setTimeout(fire, 500)

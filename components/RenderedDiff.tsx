@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useMemo, useCallback } from 'react'
 import type { DiffHunk } from '@/lib/diff/computeDiff'
+import { setPanelContext } from '@/lib/comments/panelContext'
 
 interface ThreadAnchor {
   type: string
@@ -404,10 +405,12 @@ export default function RenderedDiff({
   // three times spread out — by 500ms, even slow hydration has registered the
   // listener, so the last event always lands.
   useEffect(() => {
-    const fire = () =>
+    const fire = () => {
+      setPanelContext({ type: 'diff', sourceId, filePath, baseSha, headSha })
       window.dispatchEvent(
         new CustomEvent('diff-opened', { detail: { sourceId, filePath, baseSha, headSha } }),
       )
+    }
     const t1 = setTimeout(fire, 0)
     const t2 = setTimeout(fire, 150)
     const t3 = setTimeout(fire, 500)

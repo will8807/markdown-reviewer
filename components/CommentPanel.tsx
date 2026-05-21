@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import type { serializeSelection } from '@/lib/anchors/textAnchor'
 import { filterThreads, sortThreads, type StatusFilter } from '@/lib/comments/threadFilters'
+import { getPanelContext } from '@/lib/comments/panelContext'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,6 +114,10 @@ export default function CommentPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const threadListRef = useRef<HTMLUListElement>(null)
 
+  // Stable refs so the mount-bootstrap effect can call them without deps
+  const refreshFileThreadsRef = useRef<(fid: string) => void>(() => {})
+  const refreshDiffThreadsRef = useRef<(ctx: DiffContext) => void>(() => {})
+
   const pending = filePending ?? diffPending ?? imagePending
 
   useEffect(() => {
@@ -153,6 +158,7 @@ export default function CommentPanel() {
       .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
       .catch(() => null)
   }, [])
+  refreshFileThreadsRef.current = refreshFileThreads
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -192,6 +198,21 @@ export default function CommentPanel() {
       .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
       .catch(() => null)
   }, [params])
+  refreshDiffThreadsRef.current = refreshDiffThreads
+
+  // Bootstrap on mount: if a content component fired its event before our
+  // listeners registered, read the stored context and load threads now.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const ctx = getPanelContext()
+    if (!ctx) return
+    if (ctx.type === 'file') {
+      refreshFileThreadsRef.current(ctx.fileId)
+    } else {
+      setDiffCtx(ctx)
+      refreshDiffThreadsRef.current(ctx)
+    }
+  }, []) // mount only
 
   useEffect(() => {
     const handler = (e: Event) => {

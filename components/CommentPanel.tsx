@@ -621,8 +621,9 @@ export default function CommentPanel() {
                     {(['ACCEPTED', 'REJECTED', 'DISCUSS'] as const).map((s) => (
                       <button
                         key={s}
+                        disabled={thread.resolved}
                         onClick={(e) => { e.stopPropagation(); changeStatus(thread, s) }}
-                        className={`text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors ${
+                        className={`text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                           thread.status === s
                             ? s === 'ACCEPTED' ? 'border-green-500 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
                               s === 'REJECTED' ? 'border-red-500 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :

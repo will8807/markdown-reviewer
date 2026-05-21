@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -14,6 +14,11 @@ interface RefInfo {
   name: string
   sha: string
   type: 'branch' | 'tag'
+}
+
+interface ThreadCounts {
+  open: number
+  resolved: number
 }
 
 function buildTree(files: string[]): TreeNode[] {
@@ -40,6 +45,30 @@ function buildTree(files: string[]): TreeNode[] {
   return root
 }
 
+function CommentBadge({ counts }: { counts: ThreadCounts | undefined }) {
+  if (!counts || (counts.open === 0 && counts.resolved === 0)) return null
+  return (
+    <span className="ml-auto flex items-center gap-1 shrink-0">
+      {counts.open > 0 && (
+        <span
+          title={`${counts.open} open comment${counts.open === 1 ? '' : 's'}`}
+          className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+        >
+          {counts.open}
+        </span>
+      )}
+      {counts.resolved > 0 && (
+        <span
+          title={`${counts.resolved} resolved`}
+          className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+        >
+          ✓{counts.resolved}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function TreeNodes({
   nodes,
   projectId,
@@ -47,6 +76,7 @@ function TreeNodes({
   currentPath,
   ref,
   depth,
+  threadCounts,
 }: {
   nodes: TreeNode[]
   projectId: string
@@ -54,6 +84,7 @@ function TreeNodes({
   currentPath: string | null
   ref: string | null
   depth: number
+  threadCounts: Record<string, ThreadCounts>
 }) {
   return (
     <ul className="space-y-0.5">
@@ -71,18 +102,20 @@ function TreeNodes({
                 currentPath={currentPath}
                 ref={ref}
                 depth={depth + 1}
+                threadCounts={threadCounts}
               />
             </>
           ) : (
             <Link
               href={`/projects/${projectId}/sources/${sourceId}?path=${encodeURIComponent(node.path)}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`}
-              className={`block truncate rounded px-2 py-0.5 text-sm ${
+              className={`flex items-center gap-1 truncate rounded px-2 py-0.5 text-sm ${
                 currentPath === node.path
                   ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
                   : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
               }`}
             >
-              {node.name}
+              <span className="truncate">{node.name}</span>
+              <CommentBadge counts={threadCounts[node.path]} />
             </Link>
           )}
         </li>
@@ -143,6 +176,7 @@ export default function FileTree() {
   const searchParams = useSearchParams()
   const [files, setFiles] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [threadCounts, setThreadCounts] = useState<Record<string, ThreadCounts>>({})
 
   const projectId = params?.projectId
   const sourceId = params?.sourceId
@@ -161,6 +195,27 @@ export default function FileTree() {
       .catch(() => setError('Failed to load file tree'))
   }, [projectId, sourceId, ref])
 
+  const fetchCounts = useCallback(() => {
+    if (!projectId || !sourceId) return
+    fetch(`/api/projects/${projectId}/sources/${sourceId}/thread-counts`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { counts?: Record<string, ThreadCounts> } | null) => {
+        if (data?.counts) setThreadCounts(data.counts)
+      })
+      .catch(() => {})
+  }, [projectId, sourceId])
+
+  useEffect(() => {
+    fetchCounts()
+  }, [fetchCounts])
+
+  // Refresh counts whenever threads change (CommentPanel broadcasts this)
+  useEffect(() => {
+    const handler = () => fetchCounts()
+    window.addEventListener('threads-updated', handler)
+    return () => window.removeEventListener('threads-updated', handler)
+  }, [fetchCounts])
+
   if (!projectId || !sourceId) return null
   if (error) return <p className="p-4 text-sm text-red-500">{error}</p>
 
@@ -177,6 +232,7 @@ export default function FileTree() {
           currentPath={currentPath}
           ref={ref}
           depth={0}
+          threadCounts={threadCounts}
         />
       </nav>
     </div>

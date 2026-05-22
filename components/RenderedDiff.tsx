@@ -341,6 +341,13 @@ export default function RenderedDiff({
     [hunks],
   )
 
+  // Stable dangerouslySetInnerHTML objects. React 19's updateProperties
+  // re-applies dangerouslySetInnerHTML whenever the prop object's identity
+  // changes; a fresh {__html} literal each render would re-set innerHTML on
+  // every re-render, destroying the imperatively-applied highlights below.
+  const baseInner = useMemo(() => (baseHtml ? { __html: baseHtml } : undefined), [baseHtml])
+  const headInner = useMemo(() => (headHtml ? { __html: headHtml } : undefined), [headHtml])
+
   // Highlight changed blocks after HTML is in the DOM
   useEffect(() => { applyHighlights(baseRef.current, baseChangedLines, 'base') }, [baseHtml, baseChangedLines])
   useEffect(() => { applyHighlights(headRef.current, headChangedLines, 'head') }, [headHtml, headChangedLines])
@@ -502,7 +509,7 @@ export default function RenderedDiff({
             data-testid="diff-base-panel"
             className="flex-1 overflow-y-auto p-6 prose prose-zinc dark:prose-invert max-w-none"
             // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: baseHtml }}
+            dangerouslySetInnerHTML={baseInner}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-8 text-sm text-zinc-400 italic">
@@ -522,7 +529,7 @@ export default function RenderedDiff({
             data-testid="diff-head-panel"
             className="flex-1 overflow-y-auto p-6 prose prose-zinc dark:prose-invert max-w-none"
             // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: headHtml }}
+            dangerouslySetInnerHTML={headInner}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-8 text-sm text-zinc-400 italic">

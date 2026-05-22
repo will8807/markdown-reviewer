@@ -91,6 +91,30 @@ When('I change head to {string}', async function (this: PlaywrightWorld, ref: st
   await this.page.waitForLoadState('networkidle')
 })
 
+When('I collapse the changed-files pane', async function (this: PlaywrightWorld) {
+  await this.page.locator('button[title="Collapse file list"]').click()
+  // The pane width animates over 200ms; let it settle.
+  await this.page.waitForTimeout(400)
+})
+
+Then('the diff shows highlighted changed blocks', async function (this: PlaywrightWorld) {
+  // Changed blocks get an inline background-color applied imperatively by
+  // RenderedDiff. Poll because the highlight runs in a post-render effect.
+  await expect
+    .poll(
+      () =>
+        this.page.evaluate(() => {
+          const panel = document.querySelector('[data-testid="diff-base-panel"]')
+          if (!panel) return 0
+          return [...panel.querySelectorAll<HTMLElement>('[data-source-start]')].filter(
+            (el) => el.style.backgroundColor !== '',
+          ).length
+        }),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0)
+})
+
 // ── Changed-files list ────────────────────────────────────────────────────────
 
 Then(

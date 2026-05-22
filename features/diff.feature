@@ -22,6 +22,12 @@ Feature: Diff review
     And the diff shows an added line containing "Welcome to the docs"
     And the diff shows context lines from the surrounding paragraph
 
+  Scenario: Diff highlighting persists when a side pane is collapsed
+    Given I am viewing the diff for "README.md" with base "main" and head "feature/copyedits"
+    Then the diff shows highlighted changed blocks
+    When I collapse the changed-files pane
+    Then the diff shows highlighted changed blocks
+
   Scenario: Added file shows only added lines and no base content
     Given I am on the compare view for "docs-repo" with base "main" and head "feature/copyedits"
     When I open the diff for "guide/new-page.md"

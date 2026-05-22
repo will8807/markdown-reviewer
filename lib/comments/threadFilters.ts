@@ -16,7 +16,7 @@ export function filterThreads<T extends FilterableThread>(
   if (opts.status && opts.status !== 'all') {
     result = result.filter((t) => {
       if (opts.status === 'resolved') return t.resolved
-      if (opts.status === 'open') return !t.resolved && t.status === 'OPEN'
+      if (opts.status === 'open') return !t.resolved
       if (opts.status === 'accepted') return t.status === 'ACCEPTED'
       if (opts.status === 'rejected') return t.status === 'REJECTED'
       if (opts.status === 'discuss') return t.status === 'DISCUSS'

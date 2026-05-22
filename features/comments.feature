@@ -52,9 +52,9 @@ Feature: Comments
     And I am on the viewer for the demo source
     When I click the file "README.md" in the tree
     And I click the "Accept" status button on the thread quoting "Demo Project"
-    And I click the "accepted" status filter
+    And I click the "open" status filter
     Then the comment panel shows the thread quoting "Demo Project"
-    When I click the "open" status filter
+    When I click "Resolve" on the thread quoting "Demo Project"
     Then the comment panel shows no threads matching the filter
 
   Scenario: Sorting comments by date

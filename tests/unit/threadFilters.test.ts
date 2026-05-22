@@ -35,9 +35,9 @@ describe('filterThreads — status', () => {
     expect(filterThreads(threads, {})).toHaveLength(5)
   })
 
-  it('filters to open (non-resolved OPEN) threads', () => {
+  it('filters to open (any non-resolved) threads', () => {
     const result = filterThreads(threads, { status: 'open' })
-    expect(result.map((t) => t.id)).toEqual(['t1'])
+    expect(result.map((t) => t.id)).toEqual(['t1', 't2', 't3', 't4'])
   })
 
   it('filters to accepted threads', () => {

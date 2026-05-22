@@ -20,9 +20,9 @@ export default function ViewerClient({ html, sourceContent, filePath, fileId, sh
 
   useEffect(() => {
     if (!fileId) return
-    setPanelContext({ type: 'file', fileId, sha: sha ?? undefined })
-    window.dispatchEvent(new CustomEvent('file-opened', { detail: { fileId, sha } }))
-  }, [fileId, sha])
+    setPanelContext({ type: 'file', fileId, filePath, sha: sha ?? undefined })
+    window.dispatchEvent(new CustomEvent('file-opened', { detail: { fileId, filePath, sha } }))
+  }, [fileId, filePath, sha])
 
   const handleCreateThread = useCallback(
     (anchor: ReturnType<typeof serializeSelection>) => {

@@ -72,6 +72,26 @@ export async function setThreadStatus(threadId: string, status: ThreadStatus) {
   })
 }
 
+// All file-anchored threads in a source, across every file. Diff- and
+// image-region anchors are excluded — those belong to a comparison view, not
+// the file viewer that all-files mode navigates within.
+export async function listThreadsForSource(sourceId: string) {
+  return prisma.commentThread.findMany({
+    where: {
+      sourceId,
+      anchor: { type: { in: ['TEXT_SELECTION', 'HEADING', 'BLOCK'] } },
+    },
+    include: {
+      anchor: true,
+      comments: {
+        include: { author: true },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
 export async function listThreadsForDiff(
   sourceId: string,
   filePath: string,

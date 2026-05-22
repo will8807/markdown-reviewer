@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import type { serializeSelection } from '@/lib/anchors/textAnchor'
 import { filterThreads, sortThreads, type StatusFilter } from '@/lib/comments/threadFilters'
 import { getPanelContext } from '@/lib/comments/panelContext'
+import { shouldNavigateForThread, viewerUrlForFile, type CommentScope } from '@/lib/comments/crossFileNav'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -104,6 +105,7 @@ interface DiffContext {
 
 export default function CommentPanel() {
   const params = useParams<{ projectId: string; sourceId: string }>()
+  const router = useRouter()
 
   const [threads, setThreads] = useState<Thread[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -127,8 +129,14 @@ export default function CommentPanel() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [authorFilter, setAuthorFilter] = useState<string>('all')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [scope, setScope] = useState<CommentScope>('file')
+  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const threadListRef = useRef<HTMLUListElement>(null)
+  // Set before a cross-file navigation so the thread can be activated once the
+  // target file's viewer mounts; scrollPendingRef asks the viewer to scroll.
+  const pendingActivationRef = useRef<string | null>(null)
+  const scrollPendingRef = useRef(false)
 
   // Stable refs so the mount-bootstrap effect can call them without deps
   const refreshFileThreadsRef = useRef<(fid: string, sha?: string | null) => void>(() => {})
@@ -146,8 +154,11 @@ export default function CommentPanel() {
   // Broadcast threads so MarkdownViewer / RenderedDiff can apply highlights
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent('threads-updated', { detail: { threads, activeId: activeThreadId } }),
+      new CustomEvent('threads-updated', {
+        detail: { threads, activeId: activeThreadId, scrollToActive: scrollPendingRef.current },
+      }),
     )
+    scrollPendingRef.current = false
   }, [threads, activeThreadId])
 
   // Focus a thread when a diff comment marker is clicked
@@ -179,6 +190,18 @@ export default function CommentPanel() {
   }, [])
   refreshFileThreadsRef.current = refreshFileThreads
 
+  // ── All-files thread loading ──────────────────────────────────────────────
+
+  const refreshAllThreads = useCallback(() => {
+    const projectId = params?.projectId
+    const sourceId = params?.sourceId
+    if (!projectId || !sourceId) return
+    fetch(`/api/projects/${projectId}/sources/${sourceId}/threads`)
+      .then((r) => r.json())
+      .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
+      .catch(() => null)
+  }, [params])
+
   useEffect(() => {
     const handler = (e: Event) => {
       const { anchor, sourceId, fileId: fid } = (e as CustomEvent<FilePendingComposer>).detail
@@ -193,9 +216,23 @@ export default function CommentPanel() {
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const { fileId: fid, sha } = (e as CustomEvent<{ fileId: string; sha?: string | null }>).detail
-      if (fid) {
-        setViewerSha(sha ?? null)
+      const { fileId: fid, filePath, sha } = (
+        e as CustomEvent<{ fileId: string; filePath?: string; sha?: string | null }>
+      ).detail
+      if (!fid) return
+      setViewerSha(sha ?? null)
+      if (filePath != null) setCurrentFilePath(filePath)
+      if (scope === 'all') {
+        // The all-files list is already loaded; just activate the thread that
+        // triggered this navigation (if any) and let the viewer scroll to it.
+        setFileId(fid)
+        const pending = pendingActivationRef.current
+        if (pending) {
+          pendingActivationRef.current = null
+          scrollPendingRef.current = true
+          setActiveThreadId(pending)
+        }
+      } else {
         refreshFileThreads(fid, sha)
       }
     }
@@ -205,7 +242,7 @@ export default function CommentPanel() {
       window.removeEventListener('file-opened', handler)
       window.removeEventListener('thread-created', handler)
     }
-  }, [refreshFileThreads])
+  }, [refreshFileThreads, scope])
 
   // ── Diff-mode thread loading ──────────────────────────────────────────────
 
@@ -222,6 +259,13 @@ export default function CommentPanel() {
   }, [params])
   refreshDiffThreadsRef.current = refreshDiffThreads
 
+  // Reload whatever the panel is currently showing after a thread mutation.
+  const refreshThreads = useCallback(() => {
+    if (scope === 'all') refreshAllThreads()
+    else if (fileId) refreshFileThreads(fileId, viewerSha)
+    else if (diffCtx) refreshDiffThreads(diffCtx)
+  }, [scope, fileId, viewerSha, diffCtx, refreshAllThreads, refreshFileThreads, refreshDiffThreads])
+
   // Bootstrap on mount: if a content component fired its event before our
   // listeners registered, read the stored context and load threads now.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -230,6 +274,7 @@ export default function CommentPanel() {
     if (!ctx) return
     if (ctx.type === 'file') {
       setViewerSha(ctx.sha ?? null)
+      setCurrentFilePath(ctx.filePath)
       refreshFileThreadsRef.current(ctx.fileId, ctx.sha)
     } else {
       setDiffCtx(ctx)
@@ -396,8 +441,7 @@ export default function CommentPanel() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resolved: !thread.resolved }),
     })
-    if (fileId) refreshFileThreads(fileId, viewerSha)
-    else if (diffCtx) refreshDiffThreads(diffCtx)
+    refreshThreads()
   }
 
   const submitReply = async (threadId: string) => {
@@ -411,8 +455,7 @@ export default function CommentPanel() {
       })
       setReplyThreadId(null)
       setReplyBody('')
-      if (fileId) refreshFileThreads(fileId)
-      else if (diffCtx) refreshDiffThreads(diffCtx)
+      refreshThreads()
     } finally {
       setReplySubmitting(false)
     }
@@ -429,8 +472,7 @@ export default function CommentPanel() {
       })
       setEditingCommentId(null)
       setEditBody('')
-      if (fileId) refreshFileThreads(fileId)
-      else if (diffCtx) refreshDiffThreads(diffCtx)
+      refreshThreads()
     } finally {
       setEditSubmitting(false)
     }
@@ -443,8 +485,33 @@ export default function CommentPanel() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: next }),
     })
-    if (fileId) refreshFileThreads(fileId, viewerSha)
-    else if (diffCtx) refreshDiffThreads(diffCtx)
+    refreshThreads()
+  }
+
+  // ── Scope toggle & thread activation ──────────────────────────────────────
+
+  const switchScope = (next: CommentScope) => {
+    setScope(next)
+    if (next === 'all') refreshAllThreads()
+    else if (fileId) refreshFileThreads(fileId, viewerSha)
+  }
+
+  const handleThreadClick = (thread: Thread) => {
+    const threadFilePath = thread.anchor?.filePath
+    if (shouldNavigateForThread(scope, threadFilePath, currentFilePath)) {
+      // Cross-file: open the file first; file-opened activates the thread.
+      pendingActivationRef.current = thread.id
+      const { projectId, sourceId } = params ?? {}
+      if (projectId && sourceId && threadFilePath) {
+        router.push(viewerUrlForFile(projectId, sourceId, threadFilePath))
+      }
+      return
+    }
+    setActiveThreadId((id) => {
+      const next = id === thread.id ? null : thread.id
+      if (next) scrollPendingRef.current = true
+      return next
+    })
   }
 
   // ── Filter / sort ─────────────────────────────────────────────────────────
@@ -491,7 +558,28 @@ export default function CommentPanel() {
     <div data-testid="comment-panel" className="flex flex-col h-full">
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide">Comments</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide">Comments</h2>
+          {!isDiffMode && (
+            <div className="flex gap-1">
+              {(['file', 'all'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  data-testid={`comment-scope-${s}`}
+                  onClick={() => switchScope(s)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium transition-colors ${
+                    scope === s
+                      ? 'border-blue-500 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                      : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-400'
+                  }`}
+                >
+                  {s === 'file' ? 'This file' : 'All files'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Composer */}
         {pending && (
@@ -603,7 +691,7 @@ export default function CommentPanel() {
                   key={thread.id}
                   data-testid="comment-thread"
                   data-thread-id={thread.id}
-                  onClick={() => setActiveThreadId((id) => (id === thread.id ? null : thread.id))}
+                  onClick={() => handleThreadClick(thread)}
                   className={`rounded-lg border p-3 text-sm cursor-pointer ${
                     thread.resolved
                       ? 'border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 opacity-60'
@@ -612,6 +700,14 @@ export default function CommentPanel() {
                       : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
                   }`}
                 >
+                  {scope === 'all' && thread.anchor?.filePath && (
+                    <div
+                      data-testid="thread-file-label"
+                      className="mb-1 truncate text-[10px] font-medium text-zinc-400 dark:text-zinc-500"
+                    >
+                      {thread.anchor.filePath}
+                    </div>
+                  )}
                   {/* Header row: quote + status badge */}
                   <div className="flex items-start gap-2 mb-2">
                     {quote && (

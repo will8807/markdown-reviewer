@@ -116,3 +116,27 @@ export async function listThreadsForDiff(
     orderBy: { createdAt: 'asc' },
   })
 }
+
+export async function listThreadsForDiffComparison(
+  sourceId: string,
+  baseSha: string,
+  headSha: string,
+) {
+  return prisma.commentThread.findMany({
+    where: {
+      sourceId,
+      anchor: {
+        hunkId: `${baseSha}:${headSha}`,
+        type: { in: ['DIFF_HUNK', 'IMAGE_REGION'] },
+      },
+    },
+    include: {
+      anchor: true,
+      comments: {
+        include: { author: true },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+}

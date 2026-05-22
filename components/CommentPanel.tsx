@@ -1,11 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import type { serializeSelection } from '@/lib/anchors/textAnchor'
 import { filterThreads, sortThreads, type StatusFilter } from '@/lib/comments/threadFilters'
 import { getPanelContext } from '@/lib/comments/panelContext'
-import { shouldNavigateForThread, viewerUrlForFile, type CommentScope } from '@/lib/comments/crossFileNav'
+import {
+  compareUrlForFile,
+  shouldNavigateForThread,
+  viewerUrlForFile,
+  type CommentScope,
+} from '@/lib/comments/crossFileNav'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,6 +80,8 @@ interface DiffPendingComposer {
   lineStart: number
   lineEnd: number
   selectedText: string
+  renderedStart?: number
+  renderedEnd?: number
   baseSha: string
   headSha: string
 }
@@ -106,6 +113,7 @@ interface DiffContext {
 export default function CommentPanel() {
   const params = useParams<{ projectId: string; sourceId: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [threads, setThreads] = useState<Thread[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -188,11 +196,31 @@ export default function CommentPanel() {
       .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
       .catch(() => null)
   }, [])
-  refreshFileThreadsRef.current = refreshFileThreads
+
+  useEffect(() => {
+    refreshFileThreadsRef.current = refreshFileThreads
+  }, [refreshFileThreads])
 
   // ── All-files thread loading ──────────────────────────────────────────────
 
+  const refreshAllDiffThreads = useCallback((ctx: DiffContext) => {
+    const { projectId } = params ?? {}
+    if (!projectId) return
+    const url =
+      `/api/projects/${projectId}/sources/${ctx.sourceId}/compare/threads` +
+      `?base=${encodeURIComponent(ctx.baseSha)}&head=${encodeURIComponent(ctx.headSha)}`
+    fetch(url)
+      .then((r) => r.json())
+      .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
+      .catch(() => null)
+  }, [params])
+
   const refreshAllThreads = useCallback(() => {
+    if (diffCtx) {
+      refreshAllDiffThreads(diffCtx)
+      return
+    }
+
     const projectId = params?.projectId
     const sourceId = params?.sourceId
     if (!projectId || !sourceId) return
@@ -200,7 +228,7 @@ export default function CommentPanel() {
       .then((r) => r.json())
       .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
       .catch(() => null)
-  }, [params])
+  }, [diffCtx, params, refreshAllDiffThreads])
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -257,7 +285,10 @@ export default function CommentPanel() {
       .then((data: { threads: Thread[] }) => setThreads(data.threads ?? []))
       .catch(() => null)
   }, [params])
-  refreshDiffThreadsRef.current = refreshDiffThreads
+
+  useEffect(() => {
+    refreshDiffThreadsRef.current = refreshDiffThreads
+  }, [refreshDiffThreads])
 
   // Reload whatever the panel is currently showing after a thread mutation.
   const refreshThreads = useCallback(() => {
@@ -268,34 +299,48 @@ export default function CommentPanel() {
 
   // Bootstrap on mount: if a content component fired its event before our
   // listeners registered, read the stored context and load threads now.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const ctx = getPanelContext()
-    if (!ctx) return
-    if (ctx.type === 'file') {
-      setViewerSha(ctx.sha ?? null)
-      setCurrentFilePath(ctx.filePath)
-      refreshFileThreadsRef.current(ctx.fileId, ctx.sha)
-    } else {
-      setDiffCtx(ctx)
-      refreshDiffThreadsRef.current(ctx)
-    }
+    const timer = setTimeout(() => {
+      const ctx = getPanelContext()
+      if (!ctx) return
+      if (ctx.type === 'file') {
+        setViewerSha(ctx.sha ?? null)
+        setCurrentFilePath(ctx.filePath)
+        refreshFileThreadsRef.current(ctx.fileId, ctx.sha)
+      } else {
+        setDiffCtx(ctx)
+        setCurrentFilePath(ctx.filePath)
+        refreshDiffThreadsRef.current(ctx)
+      }
+    }, 0)
+    return () => clearTimeout(timer)
   }, []) // mount only
 
   useEffect(() => {
     const handler = (e: Event) => {
       const ctx = (e as CustomEvent<DiffContext>).detail
       setDiffCtx(ctx)
+      setCurrentFilePath(ctx.filePath)
       setFilePending(null)
       setDiffPending(null)
       setImagePending(null)
       setBody('')
       setFileId(null)
-      refreshDiffThreads(ctx)
+      if (scope === 'all') {
+        refreshAllDiffThreads(ctx)
+        const pending = pendingActivationRef.current
+        if (pending) {
+          pendingActivationRef.current = null
+          scrollPendingRef.current = true
+          setActiveThreadId(pending)
+        }
+      } else {
+        refreshDiffThreads(ctx)
+      }
     }
     window.addEventListener('diff-opened', handler)
     return () => window.removeEventListener('diff-opened', handler)
-  }, [refreshDiffThreads])
+  }, [refreshAllDiffThreads, refreshDiffThreads, scope])
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -371,6 +416,8 @@ export default function CommentPanel() {
           lineStart: p.lineStart,
           lineEnd: p.lineEnd,
           selectedText: p.selectedText,
+          renderedStart: p.renderedStart,
+          renderedEnd: p.renderedEnd,
           baseSha: p.baseSha,
           headSha: p.headSha,
         },
@@ -493,17 +540,28 @@ export default function CommentPanel() {
   const switchScope = (next: CommentScope) => {
     setScope(next)
     if (next === 'all') refreshAllThreads()
+    else if (diffCtx) refreshDiffThreads(diffCtx)
     else if (fileId) refreshFileThreads(fileId, viewerSha)
   }
 
   const handleThreadClick = (thread: Thread) => {
     const threadFilePath = thread.anchor?.filePath
     if (shouldNavigateForThread(scope, threadFilePath, currentFilePath)) {
-      // Cross-file: open the file first; file-opened activates the thread.
+      // Cross-file: open the file first; the opened event activates the thread.
       pendingActivationRef.current = thread.id
       const { projectId, sourceId } = params ?? {}
       if (projectId && sourceId && threadFilePath) {
-        router.push(viewerUrlForFile(projectId, sourceId, threadFilePath))
+        router.push(
+          diffCtx
+            ? compareUrlForFile(
+                projectId,
+                sourceId,
+                threadFilePath,
+                searchParams?.get('base') ?? diffCtx.baseSha,
+                searchParams?.get('head') ?? diffCtx.headSha,
+              )
+            : viewerUrlForFile(projectId, sourceId, threadFilePath),
+        )
       }
       return
     }
@@ -538,7 +596,7 @@ export default function CommentPanel() {
 
   const isDiffMode = diffCtx !== null
 
-  if (!isDiffMode && !fileId && !filePending && !diffPending) {
+  if (!isDiffMode && !fileId && !filePending && !diffPending && !imagePending) {
     return (
       <div className="p-4">
         <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Comments</h2>
@@ -560,25 +618,23 @@ export default function CommentPanel() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide">Comments</h2>
-          {!isDiffMode && (
-            <div className="flex gap-1">
-              {(['file', 'all'] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  data-testid={`comment-scope-${s}`}
-                  onClick={() => switchScope(s)}
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium transition-colors ${
-                    scope === s
-                      ? 'border-blue-500 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                      : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-400'
-                  }`}
-                >
-                  {s === 'file' ? 'This file' : 'All files'}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex gap-1">
+            {(['file', 'all'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                data-testid={`comment-scope-${s}`}
+                onClick={() => switchScope(s)}
+                className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium transition-colors ${
+                  scope === s
+                    ? 'border-blue-500 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                    : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-400'
+                }`}
+              >
+                {s === 'file' ? 'This file' : 'All files'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Composer */}
@@ -671,7 +727,7 @@ export default function CommentPanel() {
         {/* Thread list */}
         {threads.length === 0 && !pending ? (
           <p className="text-sm text-zinc-400 italic">
-            {isDiffMode ? 'Highlight text in the diff, then click Add Comment.' : 'Select text to add a comment.'}
+            {isDiffMode ? 'Highlight text in the diff, then click Comment.' : 'Select text to add a comment.'}
           </p>
         ) : visibleThreads.length === 0 && !pending ? (
           <p className="text-sm text-zinc-400 italic">No threads match the current filters.</p>

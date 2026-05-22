@@ -14,19 +14,44 @@ interface DiffSelection {
   lineStart: number
   lineEnd: number
   selectedText: string
+  renderedStart: number | null
+  renderedEnd: number | null
+}
+
+interface PopoverState {
+  x: number
+  y: number
+  selection: DiffSelection
 }
 
 export default function AddCommentButton() {
   const [diffCtx, setDiffCtx] = useState<DiffContext | null>(null)
-  const [diffSelection, setDiffSelection] = useState<DiffSelection | null>(null)
+  const [popover, setPopover] = useState<PopoverState | null>(null)
 
   useEffect(() => {
     const onOpened = (e: Event) => {
       setDiffCtx((e as CustomEvent<DiffContext>).detail)
-      setDiffSelection(null)
+      setPopover(null)
     }
     const onSelection = (e: Event) => {
-      setDiffSelection((e as CustomEvent<DiffSelection | null>).detail)
+      const selection = (e as CustomEvent<DiffSelection | null>).detail
+      if (!selection) {
+        setPopover(null)
+        return
+      }
+
+      const browserSelection = window.getSelection()
+      if (!browserSelection?.rangeCount) {
+        setPopover(null)
+        return
+      }
+
+      const rect = browserSelection.getRangeAt(0).getBoundingClientRect()
+      setPopover({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+        selection,
+      })
     }
     window.addEventListener('diff-opened', onOpened)
     window.addEventListener('diff-selection-changed', onSelection)
@@ -36,10 +61,10 @@ export default function AddCommentButton() {
     }
   }, [])
 
-  if (!diffCtx) return null
+  if (!diffCtx || !popover) return null
 
   const onClick = () => {
-    if (!diffSelection || !diffCtx) return
+    if (!diffCtx) return
     window.dispatchEvent(
       new CustomEvent('diff-comment-requested', {
         detail: {
@@ -47,27 +72,38 @@ export default function AddCommentButton() {
           filePath: diffCtx.filePath,
           baseSha: diffCtx.baseSha,
           headSha: diffCtx.headSha,
-          diffSide: diffSelection.side,
-          lineStart: diffSelection.lineStart,
-          lineEnd: diffSelection.lineEnd,
-          selectedText: diffSelection.selectedText,
+          diffSide: popover.selection.side,
+          lineStart: popover.selection.lineStart,
+          lineEnd: popover.selection.lineEnd,
+          selectedText: popover.selection.selectedText,
+          renderedStart: popover.selection.renderedStart ?? undefined,
+          renderedEnd: popover.selection.renderedEnd ?? undefined,
         },
       }),
     )
     window.dispatchEvent(new CustomEvent('open-comment-panel'))
-    setDiffSelection(null)
+    setPopover(null)
     window.getSelection()?.removeAllRanges()
   }
 
   return (
-    <button
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      disabled={!diffSelection}
-      title={diffSelection ? 'Add a comment on the selected text' : 'Highlight text in the diff first'}
-      className="rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 bg-zinc-800 text-white hover:bg-zinc-700 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-white disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-500"
+    <div
+      role="tooltip"
+      style={{
+        position: 'fixed',
+        left: popover.x,
+        top: popover.y,
+        transform: 'translate(-50%, -100%)',
+        zIndex: 50,
+      }}
     >
-      Add Comment
-    </button>
+      <button
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onClick}
+        className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-500"
+      >
+        Comment
+      </button>
+    </div>
   )
 }

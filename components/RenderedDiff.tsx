@@ -6,6 +6,9 @@ import { setPanelContext } from '@/lib/comments/panelContext'
 
 interface ThreadAnchor {
   type: string
+  selectedText: string | null
+  renderedStart: number | null
+  renderedEnd: number | null
   diffSide: string | null
   lineStart: number | null
   lineEnd: number | null
@@ -316,6 +319,135 @@ function applyCommentMarkers(
   }
 }
 
+function supportsHighlights(): boolean {
+  return typeof CSS !== 'undefined' && 'highlights' in CSS
+}
+
+function buildTextMap(root: HTMLElement) {
+  const nodes: Text[] = []
+  const offsets: number[] = []
+  let pos = 0
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    if ((node.parentElement?.closest('.diff-comment-marker'))) continue
+    offsets.push(pos)
+    nodes.push(node as Text)
+    pos += (node as Text).textContent?.length ?? 0
+  }
+  return { nodes, offsets }
+}
+
+function renderedOffsetOf(root: HTMLElement, targetNode: Node, targetOffset: number): number | null {
+  if (targetNode.nodeType !== Node.TEXT_NODE) return null
+
+  let pos = 0
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    if ((node.parentElement?.closest('.diff-comment-marker'))) continue
+    if (node === targetNode) return pos + targetOffset
+    pos += (node as Text).textContent?.length ?? 0
+  }
+  return null
+}
+
+function findNodeAt(nodes: Text[], offsets: number[], pos: number) {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    if (offsets[i] <= pos) {
+      const localOffset = pos - offsets[i]
+      if (localOffset > (nodes[i].textContent?.length ?? 0)) return null
+      return { node: nodes[i], localOffset }
+    }
+  }
+  return null
+}
+
+function buildRange(nodes: Text[], offsets: number[], start: number, end: number): Range | null {
+  const s = findNodeAt(nodes, offsets, start)
+  const e = findNodeAt(nodes, offsets, end)
+  if (!s || !e) return null
+  const range = document.createRange()
+  range.setStart(s.node, s.localOffset)
+  range.setEnd(e.node, e.localOffset)
+  return range
+}
+
+function findAnchorElement(container: HTMLElement | null, thread: Thread): HTMLElement | null {
+  if (!container || thread.anchor?.type !== 'DIFF_HUNK') return null
+  const lineStart = thread.anchor.lineStart ?? 0
+  const lineEnd = thread.anchor.lineEnd ?? lineStart
+  if (!lineStart) return null
+
+  for (const el of container.querySelectorAll<HTMLElement>('[data-source-start]')) {
+    const blockStart = parseInt(el.dataset.sourceStart ?? '0', 10)
+    const blockEnd = parseInt(el.dataset.sourceEnd ?? '0', 10)
+    if (lineStart <= blockEnd && lineEnd >= blockStart) return el
+  }
+  return null
+}
+
+function findSelectedTextRange(container: HTMLElement | null, thread: Thread): Range | null {
+  if (!container) return null
+  if (thread.anchor?.renderedStart != null && thread.anchor.renderedEnd != null) {
+    const { nodes, offsets } = buildTextMap(container)
+    return buildRange(nodes, offsets, thread.anchor.renderedStart, thread.anchor.renderedEnd)
+  }
+
+  const target = findAnchorElement(container, thread)
+  const selectedText = thread.anchor?.selectedText?.trim()
+  if (!target || !selectedText) return null
+
+  const { nodes, offsets } = buildTextMap(target)
+  const text = nodes.map((n) => n.textContent ?? '').join('')
+  const start = text.indexOf(selectedText)
+  if (start === -1) return null
+  return buildRange(nodes, offsets, start, start + selectedText.length)
+}
+
+function applyCommentHighlights(
+  baseContainer: HTMLElement | null,
+  headContainer: HTMLElement | null,
+  threads: Thread[],
+  activeId: string | undefined,
+) {
+  if (!supportsHighlights()) return
+
+  CSS.highlights.delete('diff-comment-thread')
+  CSS.highlights.delete('diff-comment-thread-active')
+
+  const ranges: Range[] = []
+  const activeRanges: Range[] = []
+
+  for (const thread of threads) {
+    if (thread.resolved || thread.anchor?.type !== 'DIFF_HUNK') continue
+    const container = thread.anchor.diffSide === 'base' ? baseContainer : headContainer
+    const range = findSelectedTextRange(container, thread)
+    if (!range) continue
+    if (thread.id === activeId) activeRanges.push(range)
+    else ranges.push(range)
+  }
+
+  if (ranges.length > 0) CSS.highlights.set('diff-comment-thread', new Highlight(...ranges))
+  if (activeRanges.length > 0) CSS.highlights.set('diff-comment-thread-active', new Highlight(...activeRanges))
+}
+
+function scrollToThreadAnchor(
+  baseContainer: HTMLElement | null,
+  headContainer: HTMLElement | null,
+  threads: Thread[],
+  activeId: string | undefined,
+) {
+  if (!activeId) return
+  const thread = threads.find((t) => t.id === activeId)
+  if (!thread?.anchor || thread.anchor.type !== 'DIFF_HUNK') return
+
+  const container = thread.anchor.diffSide === 'base' ? baseContainer : headContainer
+  const target = findSelectedTextRange(container, thread)?.startContainer.parentElement
+    ?? findAnchorElement(container, thread)
+  target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 export default function RenderedDiff({
   sourceId,
   filePath,
@@ -331,6 +463,7 @@ export default function RenderedDiff({
   const headRef = useRef<HTMLDivElement>(null)
   const syncingRef = useRef(false)
   const threadsRef = useRef<Thread[]>([])
+  const activeIdRef = useRef<string | undefined>(undefined)
 
   const baseChangedLines = useMemo(
     () => new Set(hunks.flatMap((h) => h.lines.filter((l) => l.side === 'base').map((l) => l.lineNumber))),
@@ -360,21 +493,34 @@ export default function RenderedDiff({
   // Listen for thread updates and apply comment markers
   useEffect(() => {
     const handler = (e: Event) => {
-      const { threads } = (e as CustomEvent<{ threads: Thread[] }>).detail
+      const { threads, activeId, scrollToActive } = (
+        e as CustomEvent<{ threads: Thread[]; activeId?: string; scrollToActive?: boolean }>
+      ).detail
       threadsRef.current = threads
+      activeIdRef.current = activeId
       applyCommentMarkers(baseRef.current, threads, 'base')
       applyCommentMarkers(headRef.current, threads, 'head')
+      applyCommentHighlights(baseRef.current, headRef.current, threads, activeId)
+      if (scrollToActive) scrollToThreadAnchor(baseRef.current, headRef.current, threads, activeId)
     }
     window.addEventListener('threads-updated', handler)
-    return () => window.removeEventListener('threads-updated', handler)
+    return () => {
+      window.removeEventListener('threads-updated', handler)
+      if (supportsHighlights()) {
+        CSS.highlights.delete('diff-comment-thread')
+        CSS.highlights.delete('diff-comment-thread-active')
+      }
+    }
   }, [])
 
   // Re-apply markers after HTML changes (new file selected)
   useEffect(() => {
     applyCommentMarkers(baseRef.current, threadsRef.current, 'base')
+    applyCommentHighlights(baseRef.current, headRef.current, threadsRef.current, activeIdRef.current)
   }, [baseHtml])
   useEffect(() => {
     applyCommentMarkers(headRef.current, threadsRef.current, 'head')
+    applyCommentHighlights(baseRef.current, headRef.current, threadsRef.current, activeIdRef.current)
   }, [headHtml])
 
   // Proportional scroll sync
@@ -468,8 +614,11 @@ export default function RenderedDiff({
         window.dispatchEvent(new CustomEvent('diff-selection-changed', { detail: null }))
         return
       }
+      const container = side === 'base' ? baseRef.current : headRef.current
+      const renderedStart = container ? renderedOffsetOf(container, range.startContainer, range.startOffset) : null
+      const renderedEnd = container ? renderedOffsetOf(container, range.endContainer, range.endOffset) : null
       window.dispatchEvent(new CustomEvent('diff-selection-changed', {
-        detail: { side, lineStart, lineEnd, selectedText },
+        detail: { side, lineStart, lineEnd, selectedText, renderedStart, renderedEnd },
       }))
     },
     [],
@@ -497,7 +646,12 @@ export default function RenderedDiff({
   return (
     <div className="flex h-full overflow-hidden divide-x divide-zinc-200 dark:divide-zinc-700">
       {/* eslint-disable-next-line react/no-danger */}
-      <style>{`.diff-word-mark{border-radius:2px;color:inherit;padding:0 1px;}${onImageClick ? 'img[data-compare-path]{cursor:pointer;}' : ''}`}</style>
+      <style>{`
+        .diff-word-mark{border-radius:2px;color:inherit;padding:0 1px;}
+        ::highlight(diff-comment-thread){background-color:rgb(250 204 21 / 0.4);color:inherit;}
+        ::highlight(diff-comment-thread-active){background-color:rgb(251 146 60 / 0.6);color:inherit;}
+        ${onImageClick ? 'img[data-compare-path]{cursor:pointer;}' : ''}
+      `}</style>
       {/* Base panel */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <div className="px-4 py-1 text-xs font-mono text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border-b border-zinc-200 dark:border-zinc-700 shrink-0 select-none">

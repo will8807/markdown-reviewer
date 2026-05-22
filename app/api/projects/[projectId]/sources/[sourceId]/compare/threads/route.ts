@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { listThreadsForDiff } from '@/lib/api/threads'
+import { listThreadsForDiff, listThreadsForDiffComparison } from '@/lib/api/threads'
 
 export async function GET(
   req: NextRequest,
@@ -11,13 +11,15 @@ export async function GET(
   const head = req.nextUrl.searchParams.get('head')
   const path = req.nextUrl.searchParams.get('path')
 
-  if (!base || !head || !path) {
-    return Response.json({ error: 'base, head, and path are required' }, { status: 400 })
+  if (!base || !head) {
+    return Response.json({ error: 'base and head are required' }, { status: 400 })
   }
 
   const source = await prisma.source.findFirst({ where: { id: sourceId, projectId } })
   if (!source) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  const threads = await listThreadsForDiff(sourceId, path, base, head)
+  const threads = path
+    ? await listThreadsForDiff(sourceId, path, base, head)
+    : await listThreadsForDiffComparison(sourceId, base, head)
   return Response.json({ threads })
 }

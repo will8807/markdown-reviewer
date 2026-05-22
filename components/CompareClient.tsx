@@ -78,7 +78,7 @@ export default function CompareClient({
     </option>
   ))
 
-  const showDiffToolbar = !!(activePath && activeFileDiff && baseSha && headSha && !isImagePath(activePath) && !activeFileDiff.isBinary)
+  const showDiffPopover = !!(activePath && activeFileDiff && baseSha && headSha && !isImagePath(activePath) && !activeFileDiff.isBinary)
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -135,14 +135,10 @@ export default function CompareClient({
         <span className="text-[10px] leading-none">{leftOpen ? '‹' : '›'}</span>
       </button>
 
-      {/* Right: Add Comment toolbar (when active) + rendered diff */}
+      {/* Right: rendered diff */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      {showDiffToolbar && (
-        <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1">
-          <AddCommentButton />
-        </div>
-      )}
       <div className="flex-1 overflow-hidden" data-testid="diff-view">
+        {showDiffPopover && <AddCommentButton />}
         {activePath && activeFileDiff && baseSha && headSha ? (
           isImagePath(activePath) ? (
             <ImageDiff

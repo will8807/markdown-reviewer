@@ -305,13 +305,13 @@ Then('the response status is {int}', async function (this: PlaywrightWorld, stat
 When('I draw a comment region on the head image', async function (this: PlaywrightWorld) {
   const headImg = this.page.locator('[data-testid="image-diff"] img[alt="head"]')
   await headImg.waitFor({ state: 'visible', timeout: 10_000 })
-  // `visible` is satisfied as soon as the <img> has CSS dimensions, which can
-  // happen BEFORE the actual image bytes load. ImageRegionOverlay reads layout
-  // coords on mouseup, so an unloaded image yields tiny/garbage rects and the
-  // region-min-size check (>= 2%) silently rejects the drag. Wait for load.
+  // Wait for image pixels to actually load. `visible` is satisfied as soon as
+  // the <img> has CSS dimensions, which can precede decode. An unloaded image
+  // produces wrong layout rects and ImageRegionOverlay's min-size check (2%)
+  // silently rejects the drag.
   await headImg.evaluate(
     (img: HTMLImageElement) =>
-      img.complete
+      img.complete && img.naturalWidth > 0
         ? undefined
         : new Promise<void>((resolve) => {
             const done = () => resolve()
@@ -319,19 +319,37 @@ When('I draw a comment region on the head image', async function (this: Playwrig
             img.addEventListener('error', done, { once: true })
           }),
   )
-  const box = await headImg.boundingBox()
-  if (!box) throw new Error('Head image has no bounding box')
-  // Drag from 20% to 60% of the image — well above MIN_SIZE (2%) in both dimensions
-  await this.page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
-  await this.page.mouse.down()
-  await this.page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 10 })
-  await this.page.mouse.up()
-  // Wait for the composer textarea or region overlay to appear so subsequent
-  // steps don't race ahead of the React state update from setImagePending.
-  await Promise.race([
-    this.page.getByPlaceholder('Add a comment…').waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {}),
-    this.page.waitForTimeout(800),
-  ])
+
+  // Programmatically dispatch mousedown/move/up on ImageRegionOverlay's wrapper
+  // (the IMG's parent div). page.mouse drag was unreliable in headless CI —
+  // the wrapper's React onMouseDown sometimes never fires. Native events
+  // dispatched directly on the wrapper bubble through React's delegation
+  // reliably.
+  await headImg.evaluate((img: HTMLImageElement) => {
+    const wrapper = img.parentElement
+    if (!wrapper) throw new Error('Head image has no wrapper element')
+    const rect = wrapper.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) throw new Error('Head image wrapper has zero size')
+    const x1 = rect.left + rect.width * 0.2
+    const y1 = rect.top + rect.height * 0.2
+    const x2 = rect.left + rect.width * 0.6
+    const y2 = rect.top + rect.height * 0.6
+    const opts = (clientX: number, clientY: number) => ({
+      bubbles: true, cancelable: true, button: 0, clientX, clientY,
+    })
+    wrapper.dispatchEvent(new MouseEvent('mousedown', opts(x1, y1)))
+    wrapper.dispatchEvent(new MouseEvent('mousemove', opts(x2, y2)))
+    wrapper.dispatchEvent(new MouseEvent('mouseup', opts(x2, y2)))
+  })
+
+  // Wait for the composer textarea to render so the next step doesn't race the
+  // React state update from setImagePending. If it never appears, the next step
+  // (fill) will produce a clearer 30s timeout error rather than this one timing
+  // out at 30s with no useful context.
+  await this.page
+    .getByPlaceholder('Add a comment…')
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .catch(() => { /* let the next step report the timeout */ })
 })
 
 Then('a comment region marker is shown on the head image', async function (this: PlaywrightWorld) {

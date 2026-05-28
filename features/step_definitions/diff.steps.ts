@@ -215,25 +215,46 @@ Then('the diff shows no added lines', async function (this: PlaywrightWorld) {
 // ── Commenting on diff blocks ─────────────────────────────────────────────────
 
 // Open the comment composer for the diff line containing `text` on the given side.
-// The UI flow is: select text on the line → AddCommentButton tooltip appears on
-// mouseup → click the tooltip → composer opens. We drag-select the line's text
-// via raw mouse events (more reliable than triple-click in headless Chromium —
-// triple-click can land outside the data-source-start element, leaving the
-// mouseup handler with no anchor to attach to). Retry to absorb hydration races.
+// The UI flow is: text selection inside a [data-source-start] element →
+// AddCommentButton sees the diff-selection-changed event fired by the panel's
+// mouseup listener → "Comment" tooltip appears → click it → composer opens.
+//
+// Real-mouse drag-select and triple-click both proved unreliable in headless
+// Chromium (selection sometimes lands outside the [data-source-start] block,
+// or mouseup fires before the selection is committed). We instead create the
+// selection programmatically via the Range API, then dispatch a mouseup event
+// on the panel where the listener is attached — deterministic in any browser.
 async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' | 'head', text: string) {
-  const panel = world.page.getByTestId(`diff-${side}-panel`)
-  const block = panel.getByText(text, { exact: false }).first()
+  const panelTestId = `diff-${side}-panel`
   const commentTooltip = world.page.getByRole('button', { name: 'Comment' })
   const composer = world.page.getByPlaceholder('Add a comment…')
+
   for (let i = 0; i < 6; i++) {
-    await block.scrollIntoViewIfNeeded()
-    const box = await block.boundingBox()
-    if (!box) { await world.page.waitForTimeout(200); continue }
-    const y = box.y + box.height / 2
-    await world.page.mouse.move(box.x + 4, y)
-    await world.page.mouse.down()
-    await world.page.mouse.move(box.x + box.width - 4, y, { steps: 8 })
-    await world.page.mouse.up()
+    const selected = await world.page.evaluate(
+      ({ panelTestId, target }) => {
+        const panel = document.querySelector(`[data-testid="${panelTestId}"]`)
+        if (!panel) return false
+        const blocks = panel.querySelectorAll<HTMLElement>('[data-source-start]')
+        let block: HTMLElement | null = null
+        for (const el of blocks) {
+          if (el.textContent?.includes(target)) { block = el; break }
+        }
+        if (!block) return false
+        const sel = window.getSelection()
+        if (!sel) return false
+        sel.removeAllRanges()
+        const range = document.createRange()
+        range.selectNodeContents(block)
+        sel.addRange(range)
+        // AddCommentButton positions itself off the live selection rect, so make
+        // sure the range has a usable bounding box before firing mouseup.
+        if (range.getBoundingClientRect().width === 0) return false
+        panel.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
+        return true
+      },
+      { panelTestId, target: text },
+    )
+    if (!selected) { await world.page.waitForTimeout(200); continue }
     try {
       await commentTooltip.waitFor({ state: 'visible', timeout: 1500 })
       await commentTooltip.click()

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { getReviewedMap, type ReviewedEntry } from '@/lib/review/reviewedFiles'
 
 interface TreeNode {
   name: string
@@ -75,16 +76,20 @@ function TreeNodes({
   sourceId,
   currentPath,
   ref,
+  currentSha,
   depth,
   threadCounts,
+  reviewedMap,
 }: {
   nodes: TreeNode[]
   projectId: string
   sourceId: string
   currentPath: string | null
   ref: string | null
+  currentSha: string | null
   depth: number
   threadCounts: Record<string, ThreadCounts>
+  reviewedMap: Map<string, ReviewedEntry>
 }) {
   return (
     <ul className="space-y-0.5">
@@ -101,23 +106,36 @@ function TreeNodes({
                 sourceId={sourceId}
                 currentPath={currentPath}
                 ref={ref}
+                currentSha={currentSha}
                 depth={depth + 1}
                 threadCounts={threadCounts}
+                reviewedMap={reviewedMap}
               />
             </>
-          ) : (
-            <Link
-              href={`/projects/${projectId}/sources/${sourceId}?path=${encodeURIComponent(node.path)}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`}
-              className={`flex items-center gap-1 truncate rounded px-2 py-0.5 text-sm ${
-                currentPath === node.path
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
-                  : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-              }`}
-            >
-              <span className="truncate">{node.name}</span>
-              <CommentBadge counts={threadCounts[node.path]} />
-            </Link>
-          )}
+          ) : (() => {
+            const reviewed = reviewedMap.get(node.path)
+            const isStale = reviewed && currentSha && reviewed.sha && reviewed.sha !== currentSha
+            const isReviewed = !!reviewed && !isStale
+            return (
+              <Link
+                href={`/projects/${projectId}/sources/${sourceId}?path=${encodeURIComponent(node.path)}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`}
+                className={`flex items-center gap-1 truncate rounded px-2 py-0.5 text-sm ${
+                  currentPath === node.path
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
+                    : isReviewed
+                    ? 'text-zinc-400 hover:bg-zinc-100 dark:text-zinc-600 dark:hover:bg-zinc-800'
+                    : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                }`}
+              >
+                {isReviewed && <span className="shrink-0 text-green-500 text-xs" title="Reviewed">✓</span>}
+                {isStale && <span className="shrink-0 text-amber-400 text-xs" title="Changed since reviewed">⚠</span>}
+                <span className={`truncate ${isReviewed ? 'line-through decoration-zinc-300' : ''}`}>
+                  {node.name}
+                </span>
+                <CommentBadge counts={threadCounts[node.path]} />
+              </Link>
+            )
+          })()}
         </li>
       ))}
     </ul>
@@ -161,6 +179,7 @@ export default function FileTree() {
   const [error, setError] = useState<string | null>(null)
   const [refs, setRefs] = useState<RefInfo[]>([])
   const [threadCounts, setThreadCounts] = useState<Record<string, ThreadCounts>>({})
+  const [reviewedMap, setReviewedMap] = useState<Map<string, ReviewedEntry>>(new Map())
 
   const projectId = params?.projectId
   const sourceId = params?.sourceId
@@ -210,6 +229,21 @@ export default function FileTree() {
     return () => window.removeEventListener('threads-updated', handler)
   }, [fetchCounts])
 
+  useEffect(() => {
+    if (!sourceId) return
+    setReviewedMap(getReviewedMap(sourceId))
+  }, [sourceId])
+
+  useEffect(() => {
+    if (!sourceId) return
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ sourceId: string }>).detail
+      if (detail.sourceId === sourceId) setReviewedMap(getReviewedMap(sourceId))
+    }
+    window.addEventListener('reviewed-files-updated', handler)
+    return () => window.removeEventListener('reviewed-files-updated', handler)
+  }, [sourceId])
+
   const handleRefChange = useCallback((newRef: string) => {
     const p = new URLSearchParams(searchParams?.toString() ?? '')
     p.set('ref', newRef)
@@ -231,8 +265,10 @@ export default function FileTree() {
           sourceId={sourceId}
           currentPath={currentPath}
           ref={ref}
+          currentSha={currentSha}
           depth={0}
           threadCounts={threadCounts}
+          reviewedMap={reviewedMap}
         />
       </nav>
     </div>

@@ -1,11 +1,18 @@
-import Link from 'next/link'
 import { prisma } from '@/lib/db'
+import SourceRail from '@/components/SourceRail'
+import ThreadsForYou from '@/components/ThreadsForYou'
+import RecentFiles from '@/components/RecentFiles'
 
-async function getProjects() {
+async function getSources() {
   try {
-    return await prisma.project.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { sources: true } } },
+    return await prisma.source.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        project: { select: { id: true, name: true } },
+      },
     })
   } catch {
     return null
@@ -13,39 +20,49 @@ async function getProjects() {
 }
 
 export default async function Home() {
-  const projects = await getProjects()
+  const sources = await getSources()
+  const userId = process.env.DEV_USER_ID ?? null
 
-  return (
-    <div className="p-8 max-w-2xl">
-      <h1 className="text-2xl font-semibold mb-6">Projects</h1>
-      {projects === null ? (
+  if (sources === null) {
+    return (
+      <div className="p-8 max-w-lg">
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <p className="font-medium">Database not connected</p>
-          <p className="mt-1">Start the database and ensure <code>DATABASE_URL</code> is set in <code>.env</code>.</p>
-          <pre className="mt-2 text-xs font-mono">cp .env.example .env && docker-compose up -d</pre>
+          <p className="mt-1">
+            Ensure <code>DATABASE_URL</code> is set in <code>.env</code> and run{' '}
+            <code>npm run db:seed</code>.
+          </p>
         </div>
-      ) : projects.length === 0 ? (
-        <p className="text-zinc-500">No projects yet. Run <code>npm run db:seed</code> to create demo data.</p>
-      ) : (
-        <ul className="space-y-3">
-          {projects.map((project) => (
-            <li key={project.id}>
-              <Link
-                href={`/projects/${project.id}`}
-                className="block rounded-lg border border-zinc-200 dark:border-zinc-700 p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-              >
-                <p className="font-medium">{project.name}</p>
-                {project.description && (
-                  <p className="text-sm text-zinc-500 mt-1">{project.description}</p>
-                )}
-                <p className="text-xs text-zinc-400 mt-2">
-                  {project._count.sources} source{project._count.sources !== 1 ? 's' : ''}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full">
+      <aside
+        data-testid="source-rail"
+        className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 overflow-y-auto py-3"
+      >
+        <SourceRail sources={sources} activeSourceId={null} />
+      </aside>
+
+      <main className="flex-1 min-w-0 overflow-y-auto p-8 max-w-2xl">
+        {sources.length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No sources yet — click <strong>+ New Source</strong> in the top bar to add one.
+          </p>
+        ) : (
+          <>
+            <ThreadsForYou userId={userId} />
+            <RecentFiles />
+            {userId === null && (
+              <p className="text-sm text-zinc-400">
+                Set <code>DEV_USER_ID</code> in <code>.env</code> to see your activity.
+              </p>
+            )}
+          </>
+        )}
+      </main>
     </div>
   )
 }

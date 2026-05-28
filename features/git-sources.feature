@@ -8,10 +8,10 @@ Feature: Git source
       | feature/copyedits   | README.md (edited), guide/setup.md (edited), guide/new-page.md |
 
   Scenario: Adding a Git source by URL
-    Given I am on the project page for the demo project
-    When I add a Git source pointing at fixture "docs-repo.git"
-    Then a new source named "docs-repo" appears in the source list
-    And the source list shows "docs-repo" as a Git source
+    Given I am on the landing page
+    When I add a Git source pointing at fixture "docs-repo.git" via the "New Source" modal
+    Then a new source named "docs-repo" appears in the source rail
+    And the source rail shows "docs-repo" as a Git source
 
   Scenario: Refs are listed once the source is cloned
     Given the Git source "docs-repo" has been added
@@ -35,10 +35,10 @@ Feature: Git source
     And the file tree does not contain "obsolete.md"
 
   Scenario: Adding a Git source by an unreachable URL surfaces an error
-    Given I am on the project page for the demo project
-    When I add a Git source pointing at "https://invalid.example/does-not-exist.git"
+    Given I am on the landing page
+    When I add a Git source pointing at "https://invalid.example/does-not-exist.git" via the "New Source" modal
     Then I see an error message about the repository being unreachable
-    And no new source appears in the source list
+    And no new source appears in the source rail
 
   Scenario: Path traversal in a Git source is rejected
     Given the Git source "docs-repo" has been added

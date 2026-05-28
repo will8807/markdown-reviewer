@@ -9,6 +9,17 @@ Welcome to the demo content for Markdown Reviewer.
 - [Broken Link](this-file-does-not-exist.md)
 - [Also Missing](guide/nonexistent.md)
 
+## Project Files
+
+- [package.json](package.json) — dependencies and scripts
+- [tsconfig.json](tsconfig.json) — TypeScript configuration
+- [Dockerfile](Dockerfile) — container image
+- [eslint.config.js](eslint.config.js) — linting rules
+- [config/site.yaml](config/site.yaml) — site metadata and nav
+- [scripts/publish.sh](scripts/publish.sh) — CI publish script
+- [src/lib/mdx.ts](src/lib/mdx.ts) — markdown rendering utility
+- [src/components/DocLayout.tsx](src/components/DocLayout.tsx) — page layout component
+
 ## Features at a Glance
 
 | Feature            | Status | Notes                        |

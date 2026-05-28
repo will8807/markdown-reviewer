@@ -2,9 +2,11 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { read } from '@/lib/sources/localSource'
 import { getRepoDir } from '@/lib/sources/gitRevisions'
-import { resolveRef, readFile } from '@/lib/sources/gitSource'
+import { cloneOrFetch, resolveRef, readFile } from '@/lib/sources/gitSource'
 import { renderMarkdown } from '@/lib/markdown/render'
+import { isMarkdownPath } from '@/lib/files/fileType'
 import ViewerClient from '@/components/ViewerClient'
+import CodeListingClient from '@/components/CodeListingClient'
 
 async function ensureFileEntry(sourceId: string, filePath: string): Promise<string> {
   const existing = await prisma.fileEntry.findUnique({
@@ -27,6 +29,7 @@ export default async function ViewerPage({
 
   const source = await prisma.source.findFirst({
     where: { id: sourceId, projectId },
+    include: { project: { select: { name: true } } },
   })
   if (!source) notFound()
 
@@ -43,6 +46,7 @@ export default async function ViewerPage({
   try {
     if (source.type === 'GIT') {
       const repoDir = getRepoDir(source.id)
+      if (source.gitUrl) await cloneOrFetch(source.gitUrl, repoDir)
       resolvedSha = await resolveRef(repoDir, ref ?? 'HEAD')
       const buf = await readFile(repoDir, resolvedSha, filePath)
       content = buf.toString('utf8')
@@ -61,14 +65,31 @@ export default async function ViewerPage({
     )
   }
 
-  const html = await renderMarkdown(content, { projectId, sourceId, filePath })
-
   let fileId: string | null = null
   try {
     fileId = await ensureFileEntry(sourceId, filePath)
   } catch {
     // DB not available — comments disabled
   }
+
+  const sourceName = source.name
+  const projectName = source.project.name
+
+  if (!isMarkdownPath(filePath)) {
+    return (
+      <CodeListingClient
+        content={content}
+        filePath={filePath}
+        fileId={fileId}
+        sha={resolvedSha}
+        sourceName={sourceName}
+        projectId={projectId}
+        projectName={projectName}
+      />
+    )
+  }
+
+  const html = await renderMarkdown(content, { projectId, sourceId, filePath })
 
   return (
     <ViewerClient
@@ -77,6 +98,9 @@ export default async function ViewerPage({
       filePath={filePath}
       fileId={fileId}
       sha={resolvedSha}
+      sourceName={sourceName}
+      projectId={projectId}
+      projectName={projectName}
     />
   )
 }

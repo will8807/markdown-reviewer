@@ -61,13 +61,28 @@ export async function resolveRef(repoDir: string, ref: string): Promise<string> 
   return sha.trim()
 }
 
-// List all .md file paths at a given commit SHA. Returns sorted POSIX paths.
+const BINARY_EXTS_GIT = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp', '.tiff',
+  '.woff', '.woff2', '.ttf', '.otf', '.eot',
+  '.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z', '.rar',
+  '.exe', '.dll', '.so', '.dylib', '.class', '.pyc', '.pyd',
+  '.mp4', '.mp3', '.wav', '.avi', '.mov', '.ogg', '.flac',
+  '.pdf', '.wasm', '.bin', '.dat',
+])
+
+function isTextPath(filePath: string): boolean {
+  const dot = filePath.lastIndexOf('.')
+  if (dot === -1) return true  // no extension (Dockerfile, Makefile, LICENSE …)
+  return !BINARY_EXTS_GIT.has(filePath.slice(dot).toLowerCase())
+}
+
+// List all text file paths at a given commit SHA. Returns sorted POSIX paths.
 export async function scanTree(repoDir: string, sha: string): Promise<string[]> {
   const raw = await simpleGit(repoDir).raw(['ls-tree', '-r', '--name-only', sha])
   return raw
     .trim()
     .split('\n')
-    .filter((line) => line.endsWith('.md'))
+    .filter((line) => line && isTextPath(line))
     .sort()
 }
 

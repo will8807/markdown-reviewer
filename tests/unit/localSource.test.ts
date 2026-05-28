@@ -13,10 +13,16 @@ describe('scan', () => {
     expect(files).toContain('guide/setup.md')
   })
 
-  it('does not include non-markdown files', async () => {
+  it('includes non-markdown text files', async () => {
     const files = await scan(demoRoot)
-    const nonMd = files.filter((f) => !f.endsWith('.md'))
-    expect(nonMd).toHaveLength(0)
+    expect(files).toContain('package.json')
+    expect(files).toContain('Dockerfile')
+    expect(files).toContain('scripts/publish.sh')
+  })
+
+  it('does not include binary files', async () => {
+    const files = await scan(demoRoot)
+    expect(files.every((f) => !f.endsWith('.png'))).toBe(true)
   })
 
   it('uses forward slashes on all platforms', async () => {

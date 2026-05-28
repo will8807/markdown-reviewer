@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import MarkdownViewer from './MarkdownViewer'
+import CodeListing from './CodeListing'
 import SelectionPopover from './SelectionPopover'
 import ReviewButton from './ReviewButton'
 import type { serializeSelection } from '@/lib/anchors/textAnchor'
@@ -10,8 +10,7 @@ import { setPanelContext } from '@/lib/comments/panelContext'
 import { recordView } from '@/lib/activity/recentFiles'
 
 interface Props {
-  html: string
-  sourceContent: string
+  content: string
   filePath: string
   fileId: string | null
   sha: string | null
@@ -20,9 +19,8 @@ interface Props {
   projectName: string
 }
 
-export default function ViewerClient({
-  html,
-  sourceContent,
+export default function CodeListingClient({
+  content,
   filePath,
   fileId,
   sha,
@@ -49,25 +47,25 @@ export default function ViewerClient({
       window.dispatchEvent(
         new CustomEvent('comment-requested', {
           detail: { anchor, sourceId: params.sourceId, fileId },
-        })
+        }),
       )
     },
-    [params, fileId]
+    [params, fileId],
   )
 
   return (
-    <div className="relative">
-      <div className="flex items-center justify-end px-4 pt-3 pb-1">
+    <div className="relative p-4">
+      <div className="flex items-center justify-end pb-2">
         {params?.sourceId && (
           <ReviewButton sourceId={params.sourceId} filePath={filePath} sha={sha} />
         )}
       </div>
       <SelectionPopover
-        sourceContent={sourceContent}
+        sourceContent={content}
         filePath={filePath}
         onCreateThread={handleCreateThread}
       />
-      <MarkdownViewer html={html} />
+      <CodeListing content={content} />
     </div>
   )
 }

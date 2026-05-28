@@ -1,0 +1,31 @@
+{
+  "name": "acme-docs",
+  "version": "1.0.0",
+  "description": "Acme Corp documentation site",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "remark": "^15.0.1",
+    "remark-gfm": "^4.0.0",
+    "rehype-stringify": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

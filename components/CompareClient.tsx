@@ -7,6 +7,7 @@ import ViewerCompareToggle from './ViewerCompareToggle'
 import RenderedDiff from './RenderedDiff'
 import ImageDiff from './ImageDiff'
 import AddCommentButton from './AddCommentButton'
+import CodeDiff from './CodeDiff'
 import type { ChangedFile, DiffHunk } from '@/lib/diff/computeDiff'
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
@@ -26,6 +27,7 @@ interface ActiveFileDiff {
   headHtml: string | null
   hunks: DiffHunk[]
   isBinary: boolean
+  isCode: boolean
   status: 'added' | 'removed' | 'modified' | 'renamed'
 }
 
@@ -78,7 +80,10 @@ export default function CompareClient({
     </option>
   ))
 
-  const showDiffPopover = !!(activePath && activeFileDiff && baseSha && headSha && !isImagePath(activePath) && !activeFileDiff.isBinary)
+  const showDiffPopover = !!(
+    activePath && activeFileDiff && baseSha && headSha &&
+    !isImagePath(activePath) && !activeFileDiff.isBinary && !activeFileDiff.isCode
+  )
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -157,6 +162,16 @@ export default function CompareClient({
               <p className="font-mono text-xs">{activePath}</p>
               <p className="mt-2 text-xs">Binary files cannot be shown as a rendered diff.</p>
             </div>
+          ) : activeFileDiff.isCode ? (
+            <CodeDiff
+              projectId={projectId}
+              sourceId={sourceId}
+              filePath={activePath}
+              baseSha={baseSha}
+              headSha={headSha}
+              hunks={activeFileDiff.hunks}
+              status={activeFileDiff.status}
+            />
           ) : (
             <RenderedDiff
               sourceId={sourceId}

@@ -54,3 +54,6 @@ prisma/*.db-wal
 
 # git source clones and diff caches
 .data/
+
+# Claude Code local state (worktrees, etc.)
+.claude/

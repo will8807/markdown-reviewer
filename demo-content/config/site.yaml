@@ -1,0 +1,28 @@
+site:
+  name: Acme Docs
+  description: Official documentation for Acme Corp products
+  baseUrl: https://docs.acme.example
+  language: en
+
+nav:
+  - title: Getting Started
+    path: /guide/setup
+  - title: Advanced Topics
+    path: /advanced
+  - title: API Reference
+    path: /api-reference
+
+build:
+  outputDir: .next
+  trailingSlash: false
+  minify: true
+
+search:
+  enabled: true
+  provider: algolia
+  indexName: acme-docs-prod
+
+analytics:
+  enabled: true
+  provider: plausible
+  domain: docs.acme.example

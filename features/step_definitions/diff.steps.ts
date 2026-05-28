@@ -226,7 +226,6 @@ Then('the diff shows no added lines', async function (this: PlaywrightWorld) {
 // on the panel where the listener is attached — deterministic in any browser.
 async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' | 'head', text: string) {
   const panelTestId = `diff-${side}-panel`
-  const commentTooltip = world.page.getByRole('button', { name: 'Comment' })
   const composer = world.page.getByPlaceholder('Add a comment…')
 
   let lastDiag: Record<string, unknown> = {}
@@ -282,9 +281,19 @@ async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' 
     )
     lastDiag = diag
     if (diag.stage !== 'dispatched') { await world.page.waitForTimeout(200); continue }
+    // Click the tooltip's Comment button via the DOM rather than via Playwright's
+    // locator: the popover is positioned with `position:fixed` relative to the
+    // selection rect, which in CI can land at coords playwright considers
+    // outside the visible viewport, making `waitFor({ state: 'visible' })` fail
+    // even though the element is in the DOM.
+    const clicked = await world.page.evaluate(() => {
+      const tip = document.querySelector('[role="tooltip"] button')
+      if (!tip) return false
+      ;(tip as HTMLButtonElement).click()
+      return true
+    })
+    if (!clicked) { await world.page.waitForTimeout(200); continue }
     try {
-      await commentTooltip.waitFor({ state: 'visible', timeout: 1500 })
-      await commentTooltip.click()
       await composer.waitFor({ state: 'visible', timeout: 1500 })
       return
     } catch { /* retry */ }

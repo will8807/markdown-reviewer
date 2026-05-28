@@ -216,16 +216,24 @@ Then('the diff shows no added lines', async function (this: PlaywrightWorld) {
 
 // Open the comment composer for the diff line containing `text` on the given side.
 // The UI flow is: select text on the line → AddCommentButton tooltip appears on
-// mouseup → click the tooltip → composer opens. We use triple-click to select
-// the line's text, then click the Comment tooltip. Retry to absorb hydration
-// races (mouseup/click listeners attach in a client-side useEffect).
+// mouseup → click the tooltip → composer opens. We drag-select the line's text
+// via raw mouse events (more reliable than triple-click in headless Chromium —
+// triple-click can land outside the data-source-start element, leaving the
+// mouseup handler with no anchor to attach to). Retry to absorb hydration races.
 async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' | 'head', text: string) {
   const panel = world.page.getByTestId(`diff-${side}-panel`)
   const block = panel.getByText(text, { exact: false }).first()
   const commentTooltip = world.page.getByRole('button', { name: 'Comment' })
   const composer = world.page.getByPlaceholder('Add a comment…')
   for (let i = 0; i < 6; i++) {
-    await block.click({ clickCount: 3 })
+    await block.scrollIntoViewIfNeeded()
+    const box = await block.boundingBox()
+    if (!box) { await world.page.waitForTimeout(200); continue }
+    const y = box.y + box.height / 2
+    await world.page.mouse.move(box.x + 4, y)
+    await world.page.mouse.down()
+    await world.page.mouse.move(box.x + box.width - 4, y, { steps: 8 })
+    await world.page.mouse.up()
     try {
       await commentTooltip.waitFor({ state: 'visible', timeout: 1500 })
       await commentTooltip.click()
@@ -233,7 +241,7 @@ async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' 
       return
     } catch { /* retry */ }
   }
-  throw new Error(`Composer did not appear after clicking ${side}-panel block containing "${text}"`)
+  throw new Error(`Composer did not appear after selecting ${side}-panel block containing "${text}"`)
 }
 
 When(

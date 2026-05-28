@@ -305,6 +305,20 @@ Then('the response status is {int}', async function (this: PlaywrightWorld, stat
 When('I draw a comment region on the head image', async function (this: PlaywrightWorld) {
   const headImg = this.page.locator('[data-testid="image-diff"] img[alt="head"]')
   await headImg.waitFor({ state: 'visible', timeout: 10_000 })
+  // `visible` is satisfied as soon as the <img> has CSS dimensions, which can
+  // happen BEFORE the actual image bytes load. ImageRegionOverlay reads layout
+  // coords on mouseup, so an unloaded image yields tiny/garbage rects and the
+  // region-min-size check (>= 2%) silently rejects the drag. Wait for load.
+  await headImg.evaluate(
+    (img: HTMLImageElement) =>
+      img.complete
+        ? undefined
+        : new Promise<void>((resolve) => {
+            const done = () => resolve()
+            img.addEventListener('load', done, { once: true })
+            img.addEventListener('error', done, { once: true })
+          }),
+  )
   const box = await headImg.boundingBox()
   if (!box) throw new Error('Head image has no bounding box')
   // Drag from 20% to 60% of the image — well above MIN_SIZE (2%) in both dimensions
@@ -312,7 +326,12 @@ When('I draw a comment region on the head image', async function (this: Playwrig
   await this.page.mouse.down()
   await this.page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 10 })
   await this.page.mouse.up()
-  await this.page.waitForTimeout(300)
+  // Wait for the composer textarea or region overlay to appear so subsequent
+  // steps don't race ahead of the React state update from setImagePending.
+  await Promise.race([
+    this.page.getByPlaceholder('Add a comment…').waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {}),
+    this.page.waitForTimeout(800),
+  ])
 })
 
 Then('a comment region marker is shown on the head image', async function (this: PlaywrightWorld) {

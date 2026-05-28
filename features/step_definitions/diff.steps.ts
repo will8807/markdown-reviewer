@@ -240,14 +240,24 @@ async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' 
           if (el.textContent?.includes(target)) { block = el; break }
         }
         if (!block) return false
+        // Anchor the range at text nodes inside the block, NOT at the block
+        // itself. RenderedDiff's mouseup handler does:
+        //   range.startContainer.parentElement?.closest('[data-source-start]')
+        // .closest() walks UP from the start container's parent, so if
+        // startContainer === block, the closest call starts above the block
+        // and never finds it — the handler then drops the event as null.
+        const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
+        const firstText = walker.nextNode() as Text | null
+        if (!firstText) return false
+        let lastText: Text = firstText
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) lastText = n as Text
         const sel = window.getSelection()
         if (!sel) return false
         sel.removeAllRanges()
         const range = document.createRange()
-        range.selectNodeContents(block)
+        range.setStart(firstText, 0)
+        range.setEnd(lastText, lastText.data.length)
         sel.addRange(range)
-        // AddCommentButton positions itself off the live selection rect, so make
-        // sure the range has a usable bounding box before firing mouseup.
         if (range.getBoundingClientRect().width === 0) return false
         panel.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
         return true

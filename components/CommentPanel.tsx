@@ -316,9 +316,24 @@ export default function CommentPanel() {
     return () => clearTimeout(timer)
   }, []) // mount only
 
+  const lastDiffCtxRef = useRef<DiffContext | null>(null)
   useEffect(() => {
     const handler = (e: Event) => {
       const ctx = (e as CustomEvent<DiffContext>).detail
+      // ImageDiff/RenderedDiff dispatch diff-opened multiple times at 0/150/500ms
+      // to absorb hydration races. Treat redundant fires for the SAME context as
+      // no-ops so we don't wipe pending composer state mid-interaction.
+      const prev = lastDiffCtxRef.current
+      if (
+        prev &&
+        prev.sourceId === ctx.sourceId &&
+        prev.filePath === ctx.filePath &&
+        prev.baseSha === ctx.baseSha &&
+        prev.headSha === ctx.headSha
+      ) {
+        return
+      }
+      lastDiffCtxRef.current = ctx
       setDiffCtx(ctx)
       setCurrentFilePath(ctx.filePath)
       setFilePending(null)

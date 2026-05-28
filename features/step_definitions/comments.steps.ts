@@ -294,8 +294,9 @@ Then('after reloading the page the thread quoting {string} still shows the badge
 ) {
   await this.page.reload()
   await this.page.waitForLoadState('networkidle')
-  // Re-open the file to load threads into the panel
-  await this.page.locator('[data-testid="file-tree"] a').filter({ hasText: 'README.md' }).click()
+  // Re-open the file to load threads into the panel. Match by exact path in
+  // href to avoid the strict-mode collision with nested files like guide/README.md.
+  await this.page.locator('[data-testid="file-tree"] a[href*="path=README.md"]').first().click()
   await this.page.waitForLoadState('networkidle')
   const panel = this.page.locator('[data-testid="comment-panel"]')
   const thread = panel.locator('[data-testid="comment-thread"]').filter({ hasText: text })

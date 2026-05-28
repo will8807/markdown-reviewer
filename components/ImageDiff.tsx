@@ -115,6 +115,8 @@ export default function ImageDiff({ projectId, sourceId, filePath, baseSha, head
           detail: { sourceId, filePath, diffSide, baseSha, headSha, ...region },
         }),
       )
+      // Ensure the side panel is expanded so the composer is visible
+      window.dispatchEvent(new CustomEvent('open-comment-panel'))
     },
     [sourceId, filePath, baseSha, headSha],
   )

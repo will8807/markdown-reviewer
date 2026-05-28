@@ -214,16 +214,21 @@ Then('the diff shows no added lines', async function (this: PlaywrightWorld) {
 
 // ── Commenting on diff blocks ─────────────────────────────────────────────────
 
-// Click on a diff block and wait for the composer to appear. The click event
-// listener attaches in a client-side useEffect, so on first load the click can
-// race with hydration. Retry a few times until the composer shows up.
+// Open the comment composer for the diff line containing `text` on the given side.
+// The UI flow is: select text on the line → AddCommentButton tooltip appears on
+// mouseup → click the tooltip → composer opens. We use triple-click to select
+// the line's text, then click the Comment tooltip. Retry to absorb hydration
+// races (mouseup/click listeners attach in a client-side useEffect).
 async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' | 'head', text: string) {
   const panel = world.page.getByTestId(`diff-${side}-panel`)
   const block = panel.getByText(text, { exact: false }).first()
+  const commentTooltip = world.page.getByRole('button', { name: 'Comment' })
   const composer = world.page.getByPlaceholder('Add a comment…')
   for (let i = 0; i < 6; i++) {
-    await block.click()
+    await block.click({ clickCount: 3 })
     try {
+      await commentTooltip.waitFor({ state: 'visible', timeout: 1500 })
+      await commentTooltip.click()
       await composer.waitFor({ state: 'visible', timeout: 1500 })
       return
     } catch { /* retry */ }

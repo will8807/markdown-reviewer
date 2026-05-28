@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import CommentPanel from './CommentPanel'
 
 export default function CollapsibleCommentAside() {
@@ -27,7 +27,9 @@ export default function CollapsibleCommentAside() {
       <aside
         className={`shrink-0 border-l border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden transition-[width] duration-200 ${open ? 'w-80' : 'w-0'}`}
       >
-        <CommentPanel />
+        <Suspense>
+          <CommentPanel />
+        </Suspense>
       </aside>
     </div>
   )

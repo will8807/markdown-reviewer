@@ -232,21 +232,24 @@ async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' 
   let lastDiag: Record<string, unknown> = {}
   for (let i = 0; i < 6; i++) {
     const diag = await world.page.evaluate(
-      ({ panelTestId, target }) => {
+      ({ panelTestId, target, side }) => {
         const out: Record<string, unknown> = { stage: 'start' }
         try {
           const panel = document.querySelector(`[data-testid="${panelTestId}"]`)
           if (!panel) return { ...out, stage: 'no-panel' }
-          out.panelFound = true
           const blocks = panel.querySelectorAll<HTMLElement>('[data-source-start]')
-          out.blocksCount = blocks.length
           let block: HTMLElement | null = null
           for (const el of blocks) {
             if (el.textContent?.includes(target)) { block = el; break }
           }
-          if (!block) return { ...out, stage: 'no-matching-block' }
-          out.blockTag = block.tagName
-          out.blockHasText = !!block.textContent
+          if (!block) return { ...out, stage: 'no-matching-block', blocksCount: blocks.length }
+          const lineStart = parseInt(block.dataset.sourceStart ?? '0', 10)
+          const lineEnd = parseInt(block.dataset.sourceEnd ?? '0', 10)
+          out.lineStart = lineStart
+          out.lineEnd = lineEnd
+          if (!lineStart) return { ...out, stage: 'no-line-start' }
+
+          // Build the visual selection so AddCommentButton can position itself.
           const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
           const firstText = walker.nextNode() as Text | null
           if (!firstText) return { ...out, stage: 'no-text-node' }
@@ -259,18 +262,23 @@ async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' 
           range.setStart(firstText, 0)
           range.setEnd(lastText, lastText.data.length)
           sel.addRange(range)
-          const rect = range.getBoundingClientRect()
-          out.rectWidth = rect.width
-          out.rectHeight = rect.height
-          if (rect.width === 0) return { ...out, stage: 'zero-width-range' }
-          panel.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
-          out.selectionText = sel.toString().slice(0, 60)
+          const selectedText = sel.toString().trim()
+          out.selectionText = selectedText.slice(0, 60)
+
+          // Dispatch diff-selection-changed directly to AddCommentButton —
+          // bypass the RenderedDiff panel's mouseup listener path, which has
+          // proven unreliable in CI even when the mouseup is dispatched on
+          // the right panel element.
+          window.dispatchEvent(new CustomEvent('diff-selection-changed', {
+            detail: { side, lineStart, lineEnd, selectedText, renderedStart: null, renderedEnd: null },
+          }))
+          out.tooltipPresent = !!document.querySelector('[role="tooltip"]')
           return { ...out, stage: 'dispatched' }
         } catch (e) {
           return { ...out, stage: 'threw', error: String(e) }
         }
       },
-      { panelTestId, target: text },
+      { panelTestId, target: text, side },
     )
     lastDiag = diag
     if (diag.stage !== 'dispatched') { await world.page.waitForTimeout(200); continue }

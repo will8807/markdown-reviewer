@@ -229,42 +229,51 @@ async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' 
   const commentTooltip = world.page.getByRole('button', { name: 'Comment' })
   const composer = world.page.getByPlaceholder('Add a comment…')
 
+  let lastDiag: Record<string, unknown> = {}
   for (let i = 0; i < 6; i++) {
-    const selected = await world.page.evaluate(
+    const diag = await world.page.evaluate(
       ({ panelTestId, target }) => {
-        const panel = document.querySelector(`[data-testid="${panelTestId}"]`)
-        if (!panel) return false
-        const blocks = panel.querySelectorAll<HTMLElement>('[data-source-start]')
-        let block: HTMLElement | null = null
-        for (const el of blocks) {
-          if (el.textContent?.includes(target)) { block = el; break }
+        const out: Record<string, unknown> = { stage: 'start' }
+        try {
+          const panel = document.querySelector(`[data-testid="${panelTestId}"]`)
+          if (!panel) return { ...out, stage: 'no-panel' }
+          out.panelFound = true
+          const blocks = panel.querySelectorAll<HTMLElement>('[data-source-start]')
+          out.blocksCount = blocks.length
+          let block: HTMLElement | null = null
+          for (const el of blocks) {
+            if (el.textContent?.includes(target)) { block = el; break }
+          }
+          if (!block) return { ...out, stage: 'no-matching-block' }
+          out.blockTag = block.tagName
+          out.blockHasText = !!block.textContent
+          const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
+          const firstText = walker.nextNode() as Text | null
+          if (!firstText) return { ...out, stage: 'no-text-node' }
+          let lastText: Text = firstText
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) lastText = n as Text
+          const sel = window.getSelection()
+          if (!sel) return { ...out, stage: 'no-selection-api' }
+          sel.removeAllRanges()
+          const range = document.createRange()
+          range.setStart(firstText, 0)
+          range.setEnd(lastText, lastText.data.length)
+          sel.addRange(range)
+          const rect = range.getBoundingClientRect()
+          out.rectWidth = rect.width
+          out.rectHeight = rect.height
+          if (rect.width === 0) return { ...out, stage: 'zero-width-range' }
+          panel.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
+          out.selectionText = sel.toString().slice(0, 60)
+          return { ...out, stage: 'dispatched' }
+        } catch (e) {
+          return { ...out, stage: 'threw', error: String(e) }
         }
-        if (!block) return false
-        // Anchor the range at text nodes inside the block, NOT at the block
-        // itself. RenderedDiff's mouseup handler does:
-        //   range.startContainer.parentElement?.closest('[data-source-start]')
-        // .closest() walks UP from the start container's parent, so if
-        // startContainer === block, the closest call starts above the block
-        // and never finds it — the handler then drops the event as null.
-        const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
-        const firstText = walker.nextNode() as Text | null
-        if (!firstText) return false
-        let lastText: Text = firstText
-        for (let n = walker.nextNode(); n; n = walker.nextNode()) lastText = n as Text
-        const sel = window.getSelection()
-        if (!sel) return false
-        sel.removeAllRanges()
-        const range = document.createRange()
-        range.setStart(firstText, 0)
-        range.setEnd(lastText, lastText.data.length)
-        sel.addRange(range)
-        if (range.getBoundingClientRect().width === 0) return false
-        panel.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
-        return true
       },
       { panelTestId, target: text },
     )
-    if (!selected) { await world.page.waitForTimeout(200); continue }
+    lastDiag = diag
+    if (diag.stage !== 'dispatched') { await world.page.waitForTimeout(200); continue }
     try {
       await commentTooltip.waitFor({ state: 'visible', timeout: 1500 })
       await commentTooltip.click()
@@ -272,7 +281,10 @@ async function clickDiffBlockUntilComposer(world: PlaywrightWorld, side: 'base' 
       return
     } catch { /* retry */ }
   }
-  throw new Error(`Composer did not appear after selecting ${side}-panel block containing "${text}"`)
+  throw new Error(
+    `Composer did not appear after selecting ${side}-panel block containing "${text}". ` +
+    `Last diagnostic: ${JSON.stringify(lastDiag)}`,
+  )
 }
 
 When(
